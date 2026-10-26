@@ -64,7 +64,9 @@ fn saving_a_linked_png_refreshes_it_under_a_second() {
     eprintln!("live refresh: watcher {seen:?}, total {total:?}");
     let entries = r.history().entries().len();
 
-    // A project save in the same folder is not a reload.
+    // A project save in the same folder never causes a reload. The OS may
+    // still be delivering events from the PNG save, so check the outcome:
+    // whatever the watcher reports, reloading changes nothing.
     r.execute(
         "project.save_as",
         json!({ "path": dir.join("p.quarry") }),
@@ -72,10 +74,20 @@ fn saving_a_linked_png_refreshes_it_under_a_second() {
     )
     .unwrap();
     std::thread::sleep(Duration::from_millis(400));
-    assert!(
-        watcher.changed(r.document()).is_empty(),
-        "saving the project does not trigger a refresh"
-    );
+    for id in watcher.changed(r.document()) {
+        let reply = r
+            .execute(
+                "art.reload",
+                json!({ "image": id.to_string() }),
+                Source::Human,
+            )
+            .unwrap();
+        assert_eq!(
+            reply["changed"], false,
+            "saving the project does not trigger a refresh"
+        );
+    }
+    assert_eq!(r.history().entries().len(), entries);
 
     // Undo puts the old pixels back.
     r.execute("history.undo", json!({}), Source::Human).unwrap();
