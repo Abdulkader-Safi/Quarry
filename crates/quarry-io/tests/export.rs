@@ -84,6 +84,49 @@ fn same_glb(a: &[u8], b: &[u8]) -> bool {
         })
 }
 
+/// For sampled animation: key reduction makes threshold decisions, so a
+/// last-bit float difference between operating systems can keep or drop a key.
+/// Compare what is stable (animation names, animated node and channel, node
+/// names); the accuracy test checks the motion itself on every platform.
+fn golden_animation(name: &str, file: &Path) -> Vec<u8> {
+    let bytes = std::fs::read(file).unwrap();
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/goldens")
+        .join(name);
+    if std::env::var_os("QUARRY_UPDATE_GOLDENS").is_some() {
+        std::fs::write(&path, &bytes).unwrap();
+    }
+    let expected = std::fs::read(&path)
+        .unwrap_or_else(|_| panic!("{name} golden missing; set QUARRY_UPDATE_GOLDENS=1"));
+    let shape = |b: &[u8]| {
+        let doc = gltf::Gltf::from_slice(b).unwrap();
+        let nodes: Vec<_> = doc.nodes().map(|n| n.name().map(String::from)).collect();
+        let anims: Vec<_> = doc
+            .animations()
+            .map(|a| {
+                let mut ch: Vec<_> = a
+                    .channels()
+                    .map(|c| {
+                        (
+                            c.target().node().index(),
+                            format!("{:?}", c.target().property()),
+                        )
+                    })
+                    .collect();
+                ch.sort();
+                (a.name().map(String::from), ch)
+            })
+            .collect();
+        (nodes, anims, doc.skins().count(), doc.meshes().count())
+    };
+    assert_eq!(
+        shape(&bytes),
+        shape(&expected),
+        "{name} differs from its golden; rerun with QUARRY_UPDATE_GOLDENS=1 if that is intended"
+    );
+    bytes
+}
+
 /// Compare with (or rewrite) a golden, then hand back the bytes.
 fn golden(name: &str, file: &Path) -> Vec<u8> {
     let bytes = std::fs::read(file).unwrap();
@@ -418,7 +461,7 @@ fn clips_export_by_name_within_half_a_degree_and_held_bones_stay_small() {
         json!({ "path": dir.join("anim.glb") }),
     );
     assert_eq!(reply["animations"], 2);
-    let bytes = golden("anim.glb", &dir.join("anim.glb"));
+    let bytes = golden_animation("anim.glb", &dir.join("anim.glb"));
     run(
         &mut r,
         "export.run",
