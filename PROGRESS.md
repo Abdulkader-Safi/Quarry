@@ -8,7 +8,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 
 | M | Scope | State | Notes |
 |---|-------|-------|-------|
-| M0 | De-risk: workspace, CI, viewport, pen, skin, PSD | in progress | |
+| M0 | De-risk: workspace, CI, viewport, pen, skin, PSD | in progress | built and measured on the M2 Pro; Cairn, Blender, PSD files, pen, M1 Air and Windows/Linux checks need Safi |
 | M1 | Core, shell, command server | in progress | core, file, autosave, settings, server, MCP done; app shell waits for the Figma design |
 | M2 | Tiles and linked images | in progress | commands, linked art and live refresh (~135 ms) done headless; UI waits for the design |
 | M3 | Mesh editing, UVs, scene | in progress | all commands done headless (primitives, selection, edits, mirror, scene, UV); UI waits for the design |
@@ -17,7 +17,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 | M6 | Rigging | in progress | all rig commands and skinned export done headless (arm golden 0/0/0); Cairn and Blender checks need Safi |
 | M7 | Animation | in progress | clips, keys, auto-key, playback, crossfade, sampled export with IK bake done headless (worst 0.19°); UI and Cairn checks left |
 | M8 | Agent experience | in progress | query cap and paging, screenshots as MCP images, guide, permissions, scripted session (6 s) done; samples, Stop pill and Connect dialog left |
-| M9 | Hardening and release | not started | |
+| M9 | Hardening and release | in progress | no-network check, corrupt-file test, bench, packaging and release workflow done; tag, M1 Air numbers and accessibility pass left |
 
 ## M0 measurements
 
@@ -95,4 +95,12 @@ brings the `http` types crate for its client trait; no client is linked. `quarry
   (reads were allowed) and then `project.save` into that folder. Now an agent may only open projects
   inside the folders it can write to, `project.save` checks the file it would write, and
   `project.recover` is human-only. Agents can still read images from any path.
+- 2026-10-27: **Where things stand.** Every Must requirement's commands, data, file format, export and
+  tests are built and pass headless (CI on three OSes; five goldens validate with no issues). What
+  remains for v1: the GPUI editor (start screen, panels, viewport input, timeline, paint and UV
+  panels, Stop pill, Connect dialog) from Safi's Figma design; the hand checks in Cairn, Blender,
+  Affinity/Photoshop, with a pen and on the M1 Air; and the optional Should/Could cards.
+- 2026-10-27: Command error messages are written inline in each command, not in one strings file.
+  They reach agents as much as people. The UI's own strings go in one file when the shell is built;
+  moving the command messages there is part of the accessibility pass.
 
