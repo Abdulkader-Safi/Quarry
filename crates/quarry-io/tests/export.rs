@@ -192,3 +192,54 @@ fn exporting_nothing_says_so() {
         .unwrap_err();
     assert_eq!(err.code, quarry_core::ErrorCode::NothingSelected);
 }
+
+fn rigged_arm() -> CommandRegistry {
+    let mut r = registry();
+    run(&mut r, "rig.skeleton_new", json!({ "name": "rig" }));
+    run(&mut r, "rig.bone_add", json!({ "name": "upper.L", "head": [0, 1, 0], "tail": [1, 1, 0] }));
+    run(&mut r, "rig.bone_add", json!({ "name": "lower.L", "parent": "upper.L", "tail": [2, 1, 0] }));
+    run(&mut r, "mesh.add_primitive", json!({ "kind": "box", "name": "Arm", "size": [2, 0.2, 0.2], "position": [1, 1, 0] }));
+    run(&mut r, "rig.bind_auto", json!({ "object": "Arm" }));
+    r
+}
+
+#[test]
+fn a_skinned_arm_exports_skin_joints_weights_and_bind_matrices() {
+    let dir = folder("arm");
+    let mut r = rigged_arm();
+    let reply = run(&mut r, "export.run", json!({ "path": dir.join("arm.glb") }));
+    assert_eq!(reply["report"]["errors"], json!([]));
+    let bytes = golden("arm.glb", &dir.join("arm.glb"));
+
+    let (doc, buffers, _) = gltf::import_slice(&bytes).unwrap();
+    assert_eq!(doc.skins().count(), 1);
+    let skin = doc.skins().next().unwrap();
+    let names: Vec<_> = skin.joints().map(|j| j.name().unwrap().to_string()).collect();
+    assert_eq!(names, ["upper.L", "lower.L"]);
+    let ibms: Vec<[[f32; 4]; 4]> = skin.reader(|b| Some(&buffers[b.index()])).read_inverse_bind_matrices().unwrap().collect();
+    // Each joint's rest world matrix times its inverse bind matrix is identity.
+    let world = |n: gltf::Node| glam::Mat4::from_cols_array_2d(&n.transform().matrix());
+    let upper = world(skin.joints().next().unwrap());
+    let lower = upper * world(skin.joints().nth(1).unwrap());
+    for (m, ibm) in [upper, lower].iter().zip(&ibms) {
+        let i = *m * glam::Mat4::from_cols_array_2d(ibm);
+        assert!(i.abs_diff_eq(glam::Mat4::IDENTITY, 1e-5), "{i}");
+    }
+    let arm = doc.nodes().find(|n| n.name() == Some("Arm")).unwrap();
+    assert!(arm.skin().is_some());
+    let prim = arm.mesh().unwrap().primitives().next().unwrap();
+    let reader = prim.reader(|b| Some(&buffers[b.index()]));
+    let weights: Vec<[f32; 4]> = reader.read_weights(0).unwrap().into_f32().collect();
+    assert!(weights.iter().all(|w| (w.iter().sum::<f32>() - 1.0).abs() < 1e-5));
+    assert!(reader.read_joints(0).is_some());
+}
+
+#[test]
+fn posing_before_export_does_not_move_the_bind_pose() {
+    let dir = folder("pose");
+    let mut r = rigged_arm();
+    run(&mut r, "export.run", json!({ "path": dir.join("rest.glb") }));
+    run(&mut r, "rig.pose", json!({ "bone": "lower.L", "rotation": [0, 0, 70] }));
+    run(&mut r, "export.run", json!({ "path": dir.join("posed.glb") }));
+    assert!(std::fs::read(dir.join("rest.glb")).unwrap() == std::fs::read(dir.join("posed.glb")).unwrap());
+}

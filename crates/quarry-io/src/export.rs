@@ -20,7 +20,9 @@ use gltf_json::validation::Checked::Valid;
 use gltf_json::{Index, Material, Node, Scene, Texture};
 use quarry_core::command::ExportRequest;
 use quarry_core::id::Id;
-use quarry_core::model::{Document, ExportFormat, Filter, Image, Mesh, Object, ObjectKind};
+use quarry_core::model::{
+    Document, ExportFormat, Filter, Image, Mesh, Object, ObjectKind, Skeleton,
+};
 use quarry_core::{CommandError, ErrorCode};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
@@ -96,6 +98,9 @@ struct Stats {
     materials: usize,
 }
 
+/// A skeleton's glTF skin and its joint node per bone.
+type SkinNodes = (Index<gltf_json::Skin>, Vec<Index<Node>>);
+
 struct Builder<'a> {
     doc: &'a Document,
     writer: GlbWriter,
@@ -103,6 +108,10 @@ struct Builder<'a> {
     stem: String,
     loose_images: Vec<(String, Vec<u8>)>,
     meshes: HashMap<Id<Object>, Index<gltf_json::Mesh>>,
+    /// Per skeleton: its glTF skin and one joint node per bone.
+    skins: HashMap<Id<Skeleton>, SkinNodes>,
+    /// Skeleton roots and skinned meshes, which sit at the top of the scene.
+    extra_roots: Vec<Index<Node>>,
     materials: HashMap<Option<Id<Image>>, Index<Material>>,
     samplers: HashMap<bool, Index<Sampler>>,
     stats: Stats,
@@ -117,6 +126,8 @@ impl<'a> Builder<'a> {
             stem: stem.to_string(),
             loose_images: Vec::new(),
             meshes: HashMap::new(),
+            skins: HashMap::new(),
+            extra_roots: Vec::new(),
             materials: HashMap::new(),
             samplers: HashMap::new(),
             stats: Stats::default(),
@@ -152,13 +163,19 @@ impl<'a> Builder<'a> {
             for kid in kids {
                 let node = self.node(kid, None);
                 let index = self.writer.root.push(node);
-                self.writer.root.nodes[parent_node.value()]
-                    .children
-                    .get_or_insert_with(Vec::new)
-                    .push(index);
+                if self.writer.root.nodes[index.value()].skin.is_some() {
+                    // glTF ignores a skinned node's place in the tree.
+                    self.extra_roots.push(index);
+                } else {
+                    self.writer.root.nodes[parent_node.value()]
+                        .children
+                        .get_or_insert_with(Vec::new)
+                        .push(index);
+                }
                 queue.push((kid.id, index));
             }
         }
+        scene_nodes.append(&mut self.extra_roots);
         let scene = self.writer.root.push(Scene {
             extensions: None,
             extras: Default::default(),
@@ -186,6 +203,12 @@ impl<'a> Builder<'a> {
             _ => None,
         };
         let mesh = mesh_source.and_then(|source| self.mesh(source));
+        // Skinned meshes are written in skeleton space with no transform.
+        let skin = skinned(object).and_then(|sid| self.skin(sid));
+        let (scale, rotation, translation) = match skin {
+            Some(_) => (Vec3::ONE, glam::Quat::IDENTITY, Vec3::ZERO),
+            None => (scale, rotation, translation),
+        };
         let mut quarry = serde_json::Map::new();
         if let Some(kind) = object.marker_type {
             quarry.insert("marker".into(), json!(kind));
@@ -202,6 +225,7 @@ impl<'a> Builder<'a> {
         Node {
             name: Some(object.name.clone()),
             mesh,
+            skin,
             translation: (translation != Vec3::ZERO).then(|| translation.into()),
             rotation: (rotation != glam::Quat::IDENTITY)
                 .then(|| UnitQuaternion(rotation.normalize().into())),
@@ -221,10 +245,11 @@ impl<'a> Builder<'a> {
         for (i, f) in mesh.faces.iter().enumerate() {
             by_image.entry(f.image).or_default().push(i);
         }
+        let bake = skinned(object).map(|_| self.doc.world_matrix(object));
         let mut primitives = Vec::new();
         for (image, faces) in by_image {
             let material = self.material(image);
-            primitives.push(self.primitive(mesh, &faces, image, material));
+            primitives.push(self.primitive(mesh, &faces, image, material, bake));
         }
         let index = self.writer.root.push(gltf_json::Mesh {
             extensions: None,
@@ -244,6 +269,7 @@ impl<'a> Builder<'a> {
         faces: &[usize],
         image: Option<Id<Image>>,
         material: Index<Material>,
+        bake: Option<Mat4>,
     ) -> Primitive {
         let size = image
             .and_then(|i| self.doc.images.get(i))
@@ -257,7 +283,10 @@ impl<'a> Builder<'a> {
         let mut uvs: Vec<[f32; 2]> = Vec::new();
         let mut colors: Vec<[f32; 4]> = Vec::new();
         let mut indices: Vec<u32> = Vec::new();
-        let mut seen: HashMap<[u32; 12], u32> = HashMap::new();
+        let mut joints: Vec<[u8; 4]> = Vec::new();
+        let mut weights: Vec<[f32; 4]> = Vec::new();
+        let mut seen: HashMap<[u32; 20], u32> = HashMap::new();
+        let normal_bake = bake.map(|m| m.inverse().transpose());
         for &f in faces {
             let face = &mesh.faces[f];
             let corner_ids: Vec<u32> = face
@@ -266,6 +295,20 @@ impl<'a> Builder<'a> {
                 .map(|c| {
                     let p = mesh.positions[c.vertex as usize];
                     let n = normals[&(f, c.vertex)];
+                    let (p, n) = match (bake, normal_bake) {
+                        (Some(m), Some(nm)) => (
+                            m.transform_point3(p),
+                            nm.transform_vector3(n).normalize_or(n),
+                        ),
+                        _ => (p, n),
+                    };
+                    let skin = mesh
+                        .weights
+                        .get(c.vertex as usize)
+                        .filter(|_| bake.is_some());
+                    let (j, w) = skin.map_or(([0u8; 4], [0f32; 4]), |s| {
+                        (s.bones.map(|b| b as u8), s.weights)
+                    });
                     // Untextured faces carry no UVs, so they do not split vertices.
                     let uv = if image.is_some() {
                         c.uv / size
@@ -285,12 +328,22 @@ impl<'a> Builder<'a> {
                         c.color.y.to_bits(),
                         c.color.z.to_bits(),
                         c.color.w.to_bits(),
+                        u32::from_le_bytes(j),
+                        w[0].to_bits(),
+                        w[1].to_bits(),
+                        w[2].to_bits(),
+                        w[3].to_bits(),
+                        0,
+                        0,
+                        0,
                     ];
                     *seen.entry(key).or_insert_with(|| {
                         positions.push(p.into());
                         out_normals.push(n.into());
                         uvs.push(uv.into());
                         colors.push(c.color.into());
+                        joints.push(j);
+                        weights.push(w);
                         (positions.len() - 1) as u32
                     })
                 })
@@ -336,6 +389,28 @@ impl<'a> Builder<'a> {
                 ),
             );
         }
+        if bake.is_some() {
+            attributes.insert(
+                Valid(Semantic::Joints(0)),
+                w.accessor(
+                    &joints,
+                    ComponentType::U8,
+                    Type::Vec4,
+                    Some(Target::ArrayBuffer),
+                    false,
+                ),
+            );
+            attributes.insert(
+                Valid(Semantic::Weights(0)),
+                w.accessor(
+                    &weights,
+                    ComponentType::F32,
+                    Type::Vec4,
+                    Some(Target::ArrayBuffer),
+                    false,
+                ),
+            );
+        }
         if colors.iter().any(|c| *c != [1.0; 4]) {
             attributes.insert(
                 Valid(Semantic::Colors(0)),
@@ -375,6 +450,69 @@ impl<'a> Builder<'a> {
             mode: Valid(Mode::Triangles),
             targets: None,
         }
+    }
+
+    /// The glTF skin for a skeleton: joint nodes in rest pose under a root
+    /// node named after the skeleton, and inverse bind matrices.
+    fn skin(&mut self, sid: Id<Skeleton>) -> Option<Index<gltf_json::Skin>> {
+        if let Some((skin, _)) = self.skins.get(&sid) {
+            return Some(*skin);
+        }
+        let s = self
+            .doc
+            .skeletons
+            .get(sid)
+            .filter(|s| !s.bones.is_empty())?;
+        let local = s.rest_local();
+        let joints: Vec<Index<Node>> = s
+            .bones
+            .iter()
+            .zip(&local)
+            .map(|(bone, m)| {
+                let (scale, rotation, translation) = m.to_scale_rotation_translation();
+                self.writer.root.push(Node {
+                    name: Some(bone.name.clone()),
+                    translation: Some(translation.into()),
+                    rotation: Some(UnitQuaternion(rotation.normalize().into())),
+                    scale: (!scale.abs_diff_eq(Vec3::ONE, 1e-6)).then(|| scale.into()),
+                    ..Default::default()
+                })
+            })
+            .collect();
+        let mut roots = Vec::new();
+        for (i, bone) in s.bones.iter().enumerate() {
+            match bone.parent {
+                Some(p) => self.writer.root.nodes[joints[p as usize].value()]
+                    .children
+                    .get_or_insert_with(Vec::new)
+                    .push(joints[i]),
+                None => roots.push(joints[i]),
+            }
+        }
+        let root = self.writer.root.push(Node {
+            name: Some(s.name.clone()),
+            children: Some(roots),
+            ..Default::default()
+        });
+        self.extra_roots.push(root);
+        let ibm: Vec<[f32; 16]> = s
+            .rest_world()
+            .iter()
+            .map(|m| m.inverse().to_cols_array())
+            .collect();
+        let ibm = self
+            .writer
+            .accessor(&ibm, ComponentType::F32, Type::Mat4, None, false);
+        let skin = self.writer.root.push(gltf_json::Skin {
+            extensions: None,
+            extras: Default::default(),
+            inverse_bind_matrices: Some(ibm),
+            joints: joints.clone(),
+            name: Some(s.name.clone()),
+            skeleton: Some(root),
+        });
+        self.skins.insert(sid, (skin, joints));
+        Some(skin)
     }
 
     fn material(&mut self, image: Option<Id<Image>>) -> Index<Material> {
@@ -478,6 +616,16 @@ impl<'a> Builder<'a> {
             extras: Default::default(),
         })
     }
+}
+
+/// The skeleton a mesh object is skinned to, when it has usable weights.
+fn skinned(object: &Object) -> Option<Id<Skeleton>> {
+    let mesh = object.mesh.as_deref()?;
+    let skin = object.skin.as_ref()?;
+    (object.kind == ObjectKind::Mesh
+        && !mesh.positions.is_empty()
+        && mesh.weights.len() == mesh.positions.len())
+    .then_some(skin.skeleton)
 }
 
 fn scaled(mut node: Node, scale: f32) -> Node {

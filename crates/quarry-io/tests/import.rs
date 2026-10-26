@@ -102,3 +102,18 @@ fn a_broken_file_is_a_plain_error() {
     assert!(err.message.contains("broken.glb"));
     assert!(r.document().objects.is_empty());
 }
+
+#[test]
+fn an_exported_rig_imports_back_with_the_same_rest_skeleton() {
+    let mut r = registry();
+    run(&mut r, "import.gltf", json!({ "path": golden("arm.glb") }));
+    let doc = r.document();
+    let s = doc.skeletons.iter().next().expect("skeleton");
+    let names: Vec<&str> = s.bones.iter().map(|b| b.name.as_str()).collect();
+    assert_eq!(names, ["upper.L", "lower.L"]);
+    assert!(s.bones[0].head.distance(glam::Vec3::new(0.0, 1.0, 0.0)) < 1e-4);
+    assert!(s.bones[1].head.distance(glam::Vec3::new(1.0, 1.0, 0.0)) < 1e-4);
+    let arm = doc.objects.by_name("Arm").expect("Arm");
+    assert_eq!(arm.skin.as_ref().unwrap().skeleton, s.id);
+    assert!(doc.objects.by_name("rig").is_some(), "the skeleton root node is kept as a layer");
+}
