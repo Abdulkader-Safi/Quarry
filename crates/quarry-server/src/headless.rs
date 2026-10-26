@@ -58,6 +58,7 @@ fn registry(dirs: &Dirs) -> CommandRegistry {
     registry.set_storage(Box::new(QuarryFiles {
         dirs: Some(dirs.clone()),
         thumbnail: Some(quarry_render::thumbnail_png),
+        screenshot: Some(quarry_render::screenshot_png),
     }));
     registry
 }
@@ -66,7 +67,15 @@ fn registry(dirs: &Dirs) -> CommandRegistry {
 fn roots(options: &Options, registry: &CommandRegistry) -> Vec<PathBuf> {
     let mut roots = vec![options.dir.clone()];
     if let Some(dir) = registry.state().path.as_ref().and_then(|p| p.parent()) {
-        roots.push(dir.to_path_buf());
+        let same = |a: &std::path::Path, b: &std::path::Path| {
+            a.canonicalize()
+                .ok()
+                .zip(b.canonicalize().ok())
+                .is_some_and(|(a, b)| a == b)
+        };
+        if !same(dir, &options.dir) {
+            roots.push(dir.to_path_buf());
+        }
     }
     roots
 }

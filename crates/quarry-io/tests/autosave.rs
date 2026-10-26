@@ -17,6 +17,7 @@ fn setup(test: &str) -> (Dirs, std::path::PathBuf, CommandRegistry) {
     r.set_storage(Box::new(QuarryFiles {
         dirs: Some(dirs.clone()),
         thumbnail: None,
+        screenshot: None,
     }));
     (dirs, projects, r)
 }
@@ -86,6 +87,7 @@ fn relaunch(dirs: &Dirs) -> CommandRegistry {
     r.set_storage(Box::new(QuarryFiles {
         dirs: Some(dirs.clone()),
         thumbnail: None,
+        screenshot: None,
     }));
     r
 }

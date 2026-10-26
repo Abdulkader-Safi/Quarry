@@ -88,6 +88,14 @@ pub trait Storage: Send + Sync {
     fn export(&self, doc: &Document, request: &ExportRequest) -> Result<Value, CommandError>;
     /// Read a .gltf or .glb as a document fragment to merge in.
     fn import_gltf(&self, path: &Path) -> Result<Document, CommandError>;
+    /// Render the document from `camera` to a PNG of `width` x `height`.
+    fn screenshot(
+        &self,
+        doc: &Document,
+        camera: &crate::camera::OrbitCamera,
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<u8>, CommandError>;
 }
 
 /// What `export.run` asks storage to write.
@@ -284,7 +292,15 @@ impl CommandRegistry {
         let (run, undoable) = (entry.run, entry.undoable);
         self.cancel.store(false, Ordering::Relaxed);
         let started = std::time::Instant::now();
-        let result = self.run_entry(name, run, undoable, args, source, progress);
+        let result = self
+            .run_entry(name, run, undoable, args, source, progress)
+            .and_then(|reply| {
+                if name.starts_with("query.") {
+                    cap_tokens(reply)
+                } else {
+                    Ok(reply)
+                }
+            });
         let ms = started.elapsed().as_millis() as u64;
         match &result {
             Ok(_) => tracing::info!(command = name, ?source, ms, "ok"),
@@ -366,6 +382,27 @@ impl Default for CommandRegistry {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Queries answer in compact JSON under 4,000 tokens (FR-MCP-02, NFR-08).
+pub const QUERY_TOKEN_CAP: usize = 4000;
+
+/// Add a token estimate (about 4 characters a token) to a query reply, or
+/// refuse it with a hint to narrow the question when it is over the cap.
+fn cap_tokens(mut reply: Value) -> CommandResult {
+    let tokens = serde_json::to_string(&reply).map_or(0, |s| s.len().div_ceil(4));
+    if tokens > QUERY_TOKEN_CAP {
+        return Err(CommandError::new(
+            ErrorCode::OutOfBounds,
+            format!(
+                "That answer is about {tokens} tokens, over the {QUERY_TOKEN_CAP} cap. Narrow it: use offset and limit, a smaller depth, or ask about one object."
+            ),
+        ));
+    }
+    if let Value::Object(map) = &mut reply {
+        map.insert("tokens".into(), tokens.into());
+    }
+    Ok(reply)
 }
 
 fn same_state(a: &State, b: &State) -> bool {

@@ -38,7 +38,13 @@ pub struct QuarryFiles {
     /// Renders `thumbnail.png` (256x256) for the recent list. Lives in
     /// `quarry-render`, passed in so this crate needs no GPU.
     pub thumbnail: Option<Thumbnailer>,
+    /// Renders `view.screenshot`; lives in `quarry-render`.
+    pub screenshot: Option<Screenshotter>,
 }
+
+/// Renders a document from a camera to PNG bytes.
+pub type Screenshotter =
+    fn(&Document, &quarry_core::camera::OrbitCamera, u32, u32) -> Result<Vec<u8>, String>;
 
 impl Storage for QuarryFiles {
     fn open(&self, path: &Path) -> Result<Document, CommandError> {
@@ -71,6 +77,27 @@ impl Storage for QuarryFiles {
         request: &quarry_core::command::ExportRequest,
     ) -> Result<serde_json::Value, CommandError> {
         crate::export::export(doc, request)
+    }
+
+    fn screenshot(
+        &self,
+        doc: &Document,
+        camera: &quarry_core::camera::OrbitCamera,
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<u8>, CommandError> {
+        let render = self.screenshot.ok_or_else(|| {
+            CommandError::new(
+                quarry_core::ErrorCode::Internal,
+                "This Quarry was started without a renderer, so it cannot take screenshots.",
+            )
+        })?;
+        render(doc, camera, width, height).map_err(|e| {
+            CommandError::new(
+                quarry_core::ErrorCode::Internal,
+                format!("The screenshot could not be rendered: {e}."),
+            )
+        })
     }
 
     fn import_gltf(&self, path: &Path) -> Result<Document, CommandError> {

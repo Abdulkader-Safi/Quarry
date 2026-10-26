@@ -19,6 +19,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const COMMANDS_URI: &str = "quarry://commands";
+const GUIDE_URI: &str = "quarry://guide";
+const GUIDE: &str = include_str!("guide.md");
 
 /// `mesh.extrude` becomes the tool `mesh_extrude`, and back.
 pub fn tool_name(command: &str) -> String {
@@ -123,7 +125,7 @@ impl ServerHandler for Bridge {
         )
         .with_server_info(Implementation::new("quarry", env!("CARGO_PKG_VERSION")))
         .with_instructions(
-            "Quarry is a low-poly modeler. Units are metres, Y is up. Every tool edits the same scene and undo history as the human. Read quarry://commands for the full list.",
+            "Quarry is a low-poly modeler. Read quarry://guide first. Units are metres, Y is up. Every tool edits the same scene and undo history as the human; take view_screenshot after each major step.",
         )
     }
 
@@ -152,8 +154,26 @@ impl ServerHandler for Bridge {
             .await
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
         let result = match reply {
-            Ok(reply) if reply["ok"] == true => {
-                CallToolResult::success(vec![ContentBlock::text(reply["result"].to_string())])
+            Ok(mut reply) if reply["ok"] == true => {
+                // Screenshots come back as images the model can see, not text.
+                let result = &mut reply["result"];
+                match result
+                    .get("image")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                {
+                    Some(data) => {
+                        let mime = result["mime"].as_str().unwrap_or("image/png").to_string();
+                        if let Value::Object(map) = result {
+                            map.remove("image");
+                        }
+                        CallToolResult::success(vec![
+                            ContentBlock::image(data, mime),
+                            ContentBlock::text(result.to_string()),
+                        ])
+                    }
+                    None => CallToolResult::success(vec![ContentBlock::text(result.to_string())]),
+                }
             }
             Ok(reply) => CallToolResult::error(vec![ContentBlock::text(
                 reply["error"]["message"]
@@ -171,9 +191,12 @@ impl ServerHandler for Bridge {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListResourcesResult, ErrorData> {
+        let guide = Resource::new(GUIDE_URI, "guide").with_description(
+            "Read first: units, axes, naming, the workflow and how to recover from errors.",
+        );
         let commands = Resource::new(COMMANDS_URI, "commands")
             .with_description("Every Quarry command with a one-line description.");
-        Ok(ListResourcesResult::with_all_items(vec![commands]))
+        Ok(ListResourcesResult::with_all_items(vec![guide, commands]))
     }
 
     async fn read_resource(
@@ -181,9 +204,17 @@ impl ServerHandler for Bridge {
         request: ReadResourceRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResponse, ErrorData> {
+        if request.uri == GUIDE_URI {
+            return Ok(
+                ReadResourceResult::new(vec![ResourceContents::text(GUIDE, GUIDE_URI)]).into(),
+            );
+        }
         if request.uri != COMMANDS_URI {
             return Err(ErrorData::resource_not_found(
-                format!("No resource at {}. Try {COMMANDS_URI}.", request.uri),
+                format!(
+                    "No resource at {}. Try {GUIDE_URI} or {COMMANDS_URI}.",
+                    request.uri
+                ),
                 None,
             ));
         }

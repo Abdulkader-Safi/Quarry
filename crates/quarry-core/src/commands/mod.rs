@@ -44,6 +44,8 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     r.register::<ControlCancel>();
     r.register::<QueryScene>();
     r.register::<QueryHistory>();
+    r.register::<QueryObject>();
+    r.register::<QueryMesh>();
     r.register::<SceneRename>();
     r.register::<SceneVisibility>();
     r.register::<SceneLock>();
@@ -53,6 +55,7 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     r.register::<ViewFrame>();
     r.register::<ViewCursor>();
     r.register::<ViewDisplay>();
+    r.register::<ViewScreenshot>();
 }
 
 /// Resolve an object by ID ("o3g1") or name.
@@ -369,15 +372,19 @@ impl Command for ControlCancel {
 pub struct QueryScene {
     /// How many levels of children to include. Default: all.
     pub depth: Option<u32>,
+    /// Skip this many top-level objects. Default 0.
+    #[serde(default)]
+    pub offset: usize,
+    /// At most this many top-level objects. Default 100.
+    pub limit: Option<usize>,
 }
 
 impl Command for QueryScene {
     const NAME: &'static str = "query.scene";
-    const DESCRIPTION: &'static str = "The scene tree: each object's id, name, kind and children.";
+    const DESCRIPTION: &'static str = "The scene tree: each object's id, name, kind and children, a page of top-level objects at a time (offset, limit).";
     const UNDOABLE: bool = false;
 
     fn run(self, cx: &mut Context) -> CommandResult {
-        // ponytail: no paging or 4,000-token cap yet; that is FR-MCP-02 in M8.
         fn children(doc: &Document, parent: Option<Id<Object>>) -> Vec<&Object> {
             let mut list: Vec<&Object> =
                 doc.objects.iter().filter(|o| o.parent == parent).collect();
@@ -395,11 +402,140 @@ impl Command for QueryScene {
             json!({ "id": o.id, "name": o.name, "kind": o.kind, "children": kids })
         }
         let doc = &cx.state.doc;
-        let roots: Vec<_> = children(doc, None)
-            .into_iter()
+        let all = children(doc, None);
+        let limit = self.limit.unwrap_or(100).clamp(1, 1000);
+        let roots: Vec<_> = all
+            .iter()
+            .skip(self.offset)
+            .take(limit)
             .map(|o| node(doc, o, self.depth))
             .collect();
-        Ok(json!({ "objects": roots }))
+        let more = all.len() > self.offset + roots.len();
+        Ok(json!({ "objects": roots, "total": all.len(), "offset": self.offset, "more": more }))
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QueryObject {
+    /// Object ID or name.
+    pub object: String,
+}
+
+impl Command for QueryObject {
+    const NAME: &'static str = "query.object";
+    const DESCRIPTION: &'static str = "One object's transform (Euler degrees), world bounds, mesh counts, skin, marker, collision and properties. No vertex lists: use query.mesh.";
+    const UNDOABLE: bool = false;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let doc = &cx.state.doc;
+        let o = doc
+            .objects
+            .get(object(doc, &self.object)?)
+            .expect("resolved");
+        let (x, y, z) = o.transform.rotation.to_euler(glam::EulerRot::XYZ);
+        let mesh = doc.drawn_mesh(o);
+        let bounds = doc.bounds([o]).map(|(lo, hi)| [lo, hi]);
+        Ok(json!({
+            "id": o.id,
+            "name": o.name,
+            "kind": o.kind,
+            "parent": o.parent.and_then(|p| doc.objects.get(p)).map(|p| &p.name),
+            "translation": o.transform.translation,
+            "rotation": [x.to_degrees(), y.to_degrees(), z.to_degrees()],
+            "scale": o.transform.scale,
+            "visible": o.visible,
+            "locked": o.locked,
+            "bounds": bounds,
+            "vertices": mesh.map_or(0, |m| m.positions.len()),
+            "faces": mesh.map_or(0, |m| m.faces.len()),
+            "triangles": mesh.map_or(0, Mesh::triangle_count),
+            "instance_of": o.instance_of.and_then(|s| doc.objects.get(s)).map(|s| &s.name),
+            "skin": o.skin.as_ref().and_then(|k| doc.skeletons.get(k.skeleton)).map(|s| &s.name),
+            "marker": o.marker_type,
+            "collision": o.collision,
+            "properties": o.properties,
+        }))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MeshPart {
+    #[default]
+    Vertices,
+    Faces,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QueryMesh {
+    /// Object ID or name.
+    pub object: String,
+    /// vertices (positions, with weights when skinned) or faces (corners with vertex index, UV in pixels, image).
+    #[serde(default)]
+    pub part: MeshPart,
+    /// First index. Default 0.
+    #[serde(default)]
+    pub from: usize,
+    /// How many. Default 100, at most 1,000 (the token cap may stop you sooner).
+    pub count: Option<usize>,
+}
+
+impl Command for QueryMesh {
+    const NAME: &'static str = "query.mesh";
+    const DESCRIPTION: &'static str =
+        "A page of one object's vertices or faces (from, count). Ask for only what you need.";
+    const UNDOABLE: bool = false;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let doc = &cx.state.doc;
+        let o = doc
+            .objects
+            .get(object(doc, &self.object)?)
+            .expect("resolved");
+        let mesh = doc
+            .drawn_mesh(o)
+            .ok_or_else(|| CommandError::invalid(format!("'{}' has no mesh.", o.name)))?;
+        let count = self.count.unwrap_or(100).clamp(1, 1000);
+        let round = |v: f32| (v * 1e4).round() / 1e4;
+        let (items, total): (Vec<serde_json::Value>, usize) = match self.part {
+            MeshPart::Vertices => (
+                mesh.positions
+                    .iter()
+                    .enumerate()
+                    .skip(self.from)
+                    .take(count)
+                    .map(|(i, p)| {
+                        let mut v = json!({ "i": i, "p": [round(p.x), round(p.y), round(p.z)] });
+                        if let Some(w) = mesh.weights.get(i) {
+                            v["w"] = json!((0..4).filter(|k| w.weights[*k] > 0.0).map(|k| (w.bones[k], round(w.weights[k]))).collect::<Vec<_>>());
+                        }
+                        v
+                    })
+                    .collect(),
+                mesh.positions.len(),
+            ),
+            MeshPart::Faces => (
+                mesh.faces
+                    .iter()
+                    .enumerate()
+                    .skip(self.from)
+                    .take(count)
+                    .map(|(i, f)| json!({
+                        "i": i,
+                        "v": f.corners.iter().map(|c| c.vertex).collect::<Vec<_>>(),
+                        "uv": f.corners.iter().map(|c| [round(c.uv.x), round(c.uv.y)]).collect::<Vec<_>>(),
+                        "image": f.image,
+                    }))
+                    .collect(),
+                mesh.faces.len(),
+            ),
+        };
+        let more = total > self.from + items.len();
+        Ok(
+            json!({ "object": o.name, "total": total, "from": self.from, "items": items, "more": more }),
+        )
     }
 }
 
@@ -870,5 +1006,100 @@ impl Command for ViewDisplay {
         set(&mut d.grid, self.grid);
         set(&mut d.backface_culling, self.backface_culling);
         Ok(json!({ "display": *d }))
+    }
+}
+
+/// Standard base64 (RFC 4648), for images in JSON replies.
+pub fn base64(bytes: &[u8]) -> String {
+    const ABC: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = chunk
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, b)| n | (*b as u32) << (16 - 8 * i));
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(ABC[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ViewScreenshot {
+    /// front, side, top or iso, framed on the whole scene. Default the current view.
+    pub preset: Option<crate::camera::Preset>,
+    /// Camera position [x, y, z]; with target, overrides the preset.
+    pub position: Option<[f32; 3]>,
+    /// What the camera looks at [x, y, z]. Default the scene centre.
+    pub target: Option<[f32; 3]>,
+    /// Pixels. Default 768.
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+impl Command for ViewScreenshot {
+    const NAME: &'static str = "view.screenshot";
+    const DESCRIPTION: &'static str = "Render the scene to a PNG (default 768x768) from a preset (front, side, top, iso), a position and target, or the current view. Take one after every major step to check your work.";
+    const UNDOABLE: bool = false;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let (w, h) = (self.width.unwrap_or(768), self.height.unwrap_or(768));
+        if !(16..=4096).contains(&w) || !(16..=4096).contains(&h) {
+            return Err(CommandError::new(
+                ErrorCode::OutOfBounds,
+                "width and height must be 16 to 4096 pixels.",
+            ));
+        }
+        let doc = &cx.state.doc;
+        let bounds = doc.bounds(doc.objects.iter().filter(|o| o.visible));
+        let mut camera = match self.preset {
+            Some(p) => crate::camera::OrbitCamera::preset(p),
+            None => doc.view.camera,
+        };
+        if self.preset.is_some()
+            && let Some((lo, hi)) = bounds
+        {
+            camera.frame(lo, hi);
+        }
+        if let Some(p) = self.position {
+            let target = match self.target {
+                Some(t) => vec3(t, "target")?,
+                None => bounds.map_or(Vec3::ZERO, |(lo, hi)| (lo + hi) * 0.5),
+            };
+            let offset = vec3(p, "position")? - target;
+            if offset.length() < 1e-4 {
+                return Err(CommandError::invalid(
+                    "The camera position must differ from its target.",
+                ));
+            }
+            camera.target = target;
+            camera.distance = offset.length();
+            camera.pitch = (offset.y / camera.distance).asin();
+            camera.yaw = offset.x.atan2(offset.z);
+        }
+        let png = cx.storage()?.screenshot(&cx.state.doc, &camera, w, h)?;
+        Ok(json!({ "image": base64(&png), "mime": "image/png", "width": w, "height": h }))
+    }
+}
+
+#[cfg(test)]
+mod base64_tests {
+    #[test]
+    fn matches_rfc_4648() {
+        for (raw, coded) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(super::base64(raw.as_bytes()), coded);
+        }
     }
 }

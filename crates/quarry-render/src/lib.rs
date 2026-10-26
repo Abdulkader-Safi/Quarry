@@ -11,15 +11,36 @@ pub mod snapshot;
 use glam::Mat4;
 use std::sync::{Mutex, OnceLock};
 
-/// A 256x256 iso PNG of the whole document for the recent list, or None when
-/// there is nothing to draw or no GPU.
-pub fn thumbnail_png(doc: &quarry_core::Document) -> Option<Vec<u8>> {
+fn shared() -> Option<std::sync::MutexGuard<'static, document::DocumentRenderer>> {
     static RENDERER: OnceLock<Option<Mutex<document::DocumentRenderer>>> = OnceLock::new();
-    let renderer = RENDERER
+    RENDERER
         .get_or_init(|| document::DocumentRenderer::new().ok().map(Mutex::new))
         .as_ref()?
         .lock()
-        .ok()?;
+        .ok()
+}
+
+/// `view.screenshot`: the document from `camera` as a PNG.
+pub fn screenshot_png(
+    doc: &quarry_core::Document,
+    camera: &camera::OrbitCamera,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, String> {
+    let renderer = shared().ok_or("no GPU is available")?;
+    renderer.render_png(
+        &snapshot::snapshot(doc),
+        camera,
+        doc.view.display,
+        width,
+        height,
+    )
+}
+
+/// A 256x256 iso PNG of the whole document for the recent list, or None when
+/// there is nothing to draw or no GPU.
+pub fn thumbnail_png(doc: &quarry_core::Document) -> Option<Vec<u8>> {
+    let renderer = shared()?;
     let snap = snapshot::snapshot(doc);
     let (lo, hi) = snap.bounds?;
     let mut camera = camera::OrbitCamera::preset(camera::Preset::Iso);

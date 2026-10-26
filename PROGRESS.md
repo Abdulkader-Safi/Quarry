@@ -16,7 +16,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 | M5 | glTF export and import | in progress | export and import done headless (goldens validate 0/0/0); Cairn, Blender and Kenney checks need Safi |
 | M6 | Rigging | in progress | all rig commands and skinned export done headless (arm golden 0/0/0); Cairn and Blender checks need Safi |
 | M7 | Animation | in progress | clips, keys, auto-key, playback, crossfade, sampled export with IK bake done headless (worst 0.19°); UI and Cairn checks left |
-| M8 | Agent experience | not started | |
+| M8 | Agent experience | in progress | query cap and paging, screenshots as MCP images, guide, permissions, scripted session (6 s) done; samples, Stop pill and Connect dialog left |
 | M9 | Hardening and release | not started | |
 
 ## M0 measurements

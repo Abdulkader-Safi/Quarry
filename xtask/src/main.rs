@@ -1,6 +1,7 @@
 //! Repo tasks. Usage: cargo run -p xtask -- <task>
 //!
-//! Tasks: validate-gltf, psd-check <file.psd> <flattened.png>, bench (M9), goldens (M5).
+//! Tasks: validate-gltf, psd-check <file.psd> <flattened.png>, agent-session,
+//! bench (M9), goldens (M5).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
@@ -9,6 +10,7 @@ fn main() {
     let task = std::env::args().nth(1).unwrap_or_default();
     match task.as_str() {
         "validate-gltf" => validate_gltf(),
+        "agent-session" => agent_session(),
         "psd-check" => {
             let args: Vec<String> = std::env::args().skip(2).collect();
             let [psd, png] = args.as_slice() else {
@@ -17,7 +19,9 @@ fn main() {
             };
             psd_check(Path::new(psd), Path::new(png));
         }
-        "" => eprintln!("usage: cargo run -p xtask -- <validate-gltf|psd-check|bench|goldens>"),
+        "" => eprintln!(
+            "usage: cargo run -p xtask -- <validate-gltf|psd-check|agent-session|bench|goldens>"
+        ),
         other => {
             eprintln!("xtask: '{other}' lands in a later milestone");
             exit(1);
@@ -41,6 +45,28 @@ fn validate_gltf() {
     run(Command::new("node")
         .arg(validator.join("validate.mjs"))
         .args(&files));
+}
+
+/// Build Quarry and quarry-mcp, then run a scripted agent session that
+/// models, paints, rigs, animates, screenshots and exports a crate.
+fn agent_session() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    run(Command::new(env!("CARGO"))
+        .args(["build", "-p", "quarry", "-p", "quarry-mcp"])
+        .current_dir(&root));
+    let work = std::env::temp_dir().join(format!("quarry-agent-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).expect("temp folder");
+    let exe = root.join("target/debug").join(if cfg!(windows) {
+        "quarry-mcp.exe"
+    } else {
+        "quarry-mcp"
+    });
+    run(Command::new("python3")
+        .arg(root.join("xtask/agent/agent_session.py"))
+        .arg(exe)
+        .arg(&work));
+    println!("output in {}", work.display());
 }
 
 fn run(command: &mut Command) {

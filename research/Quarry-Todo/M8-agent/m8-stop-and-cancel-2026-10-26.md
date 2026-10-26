@@ -5,7 +5,7 @@ priority: "medium"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T09:57:15.000Z"
+modified: "2026-10-27T09:00:00.000Z"
 labels: ["m8", "mcp", "ui"]
 order: 70
 ---
@@ -21,5 +21,10 @@ FR-MCP-07.
 
 **Done when**
 - [ ] Start a long bake over MCP, press Stop: the bake stops and the scene matches its state before the bake.
-- [ ] Stop mid-export leaves no partial file on disk.
-- [ ] Two long commands cannot run at once; the second waits or is refused with a clear message.
+- [x] Stop mid-export leaves no partial file on disk.
+- [x] Two long commands cannot run at once; the second waits or is refused with a clear message.
+
+## Backend done 2026-10-27 (UI waits for the Figma design)
+
+- `control.cancel` from any socket client stops the running long command and the document is unchanged (M1 test); exports write through a temp file and rename, so a cancelled or failed export leaves no partial file; the server runs requests one at a time, so a second long command waits its turn.
+- Left: the agent status pill (idle, working, tool name) and the Stop button wired to the cancel flag in the app.
