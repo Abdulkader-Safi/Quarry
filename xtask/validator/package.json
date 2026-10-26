@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "description": "Khronos glTF Validator for CI and xtask validate-gltf. Not shipped.",
+  "type": "module",
+  "dependencies": {
+    "gltf-validator": "2.0.0-dev.3.10"
+  }
+}

@@ -5,3 +5,4 @@ research/spec/references/
 *.dmg
 *.app/
 *.AppImage
+node_modules/
