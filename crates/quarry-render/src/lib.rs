@@ -3,6 +3,9 @@
 //! M0 scope: one offscreen colour target, a depth buffer and a benchmark scene of
 //! 100k triangles across 5 skinned meshes with 50 bones. Presentation is the app's job.
 
+pub mod camera;
+pub mod snapshot;
+
 use glam::Mat4;
 use std::time::Instant;
 use wgpu::util::DeviceExt;

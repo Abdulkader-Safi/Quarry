@@ -5116,7 +5116,10 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "glam",
+ "image",
  "pollster 1.0.1",
+ "quarry-core",
+ "serde_json",
  "wgpu 30.0.1",
 ]
 
