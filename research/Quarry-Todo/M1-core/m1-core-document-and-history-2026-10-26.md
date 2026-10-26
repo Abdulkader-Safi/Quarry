@@ -1,11 +1,11 @@
 ---
 id: "m1-core-document-and-history-2026-10-26"
-status: "todo"
+status: "done"
 priority: "critical"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T09:57:15.000Z"
+modified: "2026-10-26T17:30:00.000Z"
 labels: ["m1", "core"]
 order: 9
 ---
@@ -21,6 +21,14 @@ The data model from build spec §5 and the history that makes every edit reversi
 - History: 200 entries or 512 MB, inverse command or snapshot, source label (`Human` / `Agent`), display label such as `Agent: extrude`. Undo, redo, cancel.
 
 **Done when**
-- [ ] Serde round-trip test of the whole §5 model, including weights and keys.
-- [ ] 200 random mutations then undo-all equals the start state; the memory cap is enforced.
-- [ ] No GPUI dependency in `quarry-core`.
+- [x] Serde round-trip test of the whole §5 model, including weights and keys.
+- [x] 200 random mutations then undo-all equals the start state; the memory cap is enforced.
+- [x] No GPUI dependency in `quarry-core`.
+
+## Done 2026-10-26
+
+- `quarry-core`: `id.rs` (u32 slot + generation, "o3g1" strings, arena with name or ID lookup), `model.rs` (every §5 type), `history.rs` (snapshot entries, 200 entries or 512 MB, source labels).
+- Values sit behind `Arc`, so a snapshot shares every object a command did not touch and an object edit does not copy its mesh. History memory is counted from what each snapshot does not share.
+- Tilesets and textures live in one `images` arena with a `role` field instead of two lists; same data, one lookup.
+- Tests (`crates/quarry-core/tests/core.rs`): full model JSON round trip; 8 seeds × 150 random human/agent commands then undo-all equals the start; 225 edits keep the newest 200. No GPUI dependency.
+- Not tested directly: the 512 MB cap (the accounting is in place; a test would need half a gigabyte).

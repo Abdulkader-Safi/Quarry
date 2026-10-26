@@ -1,3 +1,13 @@
 //! Document, IDs, CommandRegistry, History.
+//!
+//! Nothing outside `CommandRegistry::execute` mutates the document.
 
-// Nothing here yet: M0 only proves the workspace builds. Real code lands per milestone.
+pub mod command;
+pub mod commands;
+pub mod history;
+pub mod id;
+pub mod model;
+
+pub use command::{Command, CommandError, CommandRegistry, CommandResult, Context, ErrorCode};
+pub use history::Source;
+pub use model::Document;

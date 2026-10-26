@@ -40,7 +40,7 @@ objc2-foundation = "=0.3.2" # system uptime, the clock NSEvent timestamps use
 egui = "=0.37.0" # fallback only, if M0 misses its numbers
 
 # Not pinned by the spec; licence-checked like everything else.
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 thiserror = "2"
 tracing = "0.1"
