@@ -16,6 +16,7 @@ fn setup(test: &str) -> (Dirs, std::path::PathBuf, CommandRegistry) {
     let mut r = CommandRegistry::new();
     r.set_storage(Box::new(QuarryFiles {
         dirs: Some(dirs.clone()),
+        thumbnail: None,
     }));
     (dirs, projects, r)
 }
@@ -84,6 +85,7 @@ fn relaunch(dirs: &Dirs) -> CommandRegistry {
     let mut r = CommandRegistry::new();
     r.set_storage(Box::new(QuarryFiles {
         dirs: Some(dirs.clone()),
+        thumbnail: None,
     }));
     r
 }

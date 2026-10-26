@@ -26,11 +26,17 @@ const MAX_IMAGE_SIDE: u32 = 16_384;
 const MESH_MAGIC: &[u8; 4] = b"QMSH";
 const MESH_VERSION: u32 = 1;
 
+/// Renders a document to PNG bytes, or None when there is nothing to show.
+pub type Thumbnailer = fn(&Document) -> Option<Vec<u8>>;
+
 /// `project.open` / `project.save` storage for the command registry. With
 /// `dirs` set, saves keep backups and clear the autosave they replace.
 #[derive(Default)]
 pub struct QuarryFiles {
     pub dirs: Option<Dirs>,
+    /// Renders `thumbnail.png` (256x256) for the recent list. Lives in
+    /// `quarry-render`, passed in so this crate needs no GPU.
+    pub thumbnail: Option<Thumbnailer>,
 }
 
 impl Storage for QuarryFiles {
@@ -45,7 +51,8 @@ impl Storage for QuarryFiles {
             // A missing backup must not cost the user their save.
             tracing::warn!("{why}");
         }
-        write_project(doc, path)?;
+        let thumbnail = self.thumbnail.and_then(|render| render(doc));
+        write_project_with(doc, path, thumbnail.as_deref())?;
         if let Some(dirs) = &self.dirs {
             autosave::clear_autosave(dirs, Some(path));
             autosave::clear_autosave(dirs, None);
@@ -64,13 +71,22 @@ impl Storage for QuarryFiles {
 
 /// Write `doc` to `path` atomically: a crash mid-save leaves the old file intact.
 pub fn write_project(doc: &Document, path: &Path) -> Result<(), CommandError> {
+    write_project_with(doc, path, None)
+}
+
+/// [`write_project`] plus an optional `thumbnail.png`.
+pub fn write_project_with(
+    doc: &Document,
+    path: &Path,
+    thumbnail: Option<&[u8]>,
+) -> Result<(), CommandError> {
     let failed = |why: String| {
         CommandError::io(format!(
             "Could not save {}: {why}. Check the folder exists and you can write to it.",
             path.display()
         ))
     };
-    let bytes = encode(doc).map_err(failed)?;
+    let bytes = encode_with(doc, thumbnail).map_err(failed)?;
     crate::settings::write_atomic(path, &bytes).map_err(|e| failed(e.to_string()))
 }
 
@@ -87,6 +103,20 @@ pub fn read_project(path: &Path) -> Result<Document, CommandError> {
 }
 
 pub fn encode(doc: &Document) -> Result<Vec<u8>, String> {
+    encode_with(doc, None)
+}
+
+/// The thumbnail for a recent-list entry, if the file has one.
+pub fn read_thumbnail(path: &Path) -> Option<Vec<u8>> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut zip = ZipArchive::new(std::io::BufReader::new(file)).ok()?;
+    let mut total = 0;
+    read_entry(&mut zip, "thumbnail.png", &mut total)
+        .ok()
+        .flatten()
+}
+
+pub fn encode_with(doc: &Document, thumbnail: Option<&[u8]>) -> Result<Vec<u8>, String> {
     let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
     let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
     let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
@@ -122,6 +152,11 @@ pub fn encode(doc: &Document) -> Result<Vec<u8>, String> {
         zip.write_all(png.get_ref()).map_err(|e| err(&e))?;
     }
     let json = serde_json::to_vec_pretty(&json_doc).map_err(|e| err(&e))?;
+    if let Some(png) = thumbnail {
+        zip.start_file("thumbnail.png", stored)
+            .map_err(|e| err(&e))?;
+        zip.write_all(png).map_err(|e| err(&e))?;
+    }
     zip.start_file("project.json", deflated)
         .map_err(|e| err(&e))?;
     zip.write_all(&json).map_err(|e| err(&e))?;

@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 quarry-core = { path = "../quarry-core" }
 quarry-io = { path = "../quarry-io" }
+quarry-render = { path = "../quarry-render" }
 interprocess.workspace = true
 serde.workspace = true
 serde_json.workspace = true

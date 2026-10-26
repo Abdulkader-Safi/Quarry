@@ -250,7 +250,8 @@ impl DocumentRenderer {
         let target_view = target.create_view(&Default::default());
         let depth_view = depth.create_view(&Default::default());
 
-        let light = (camera.eye() - camera.target).normalize_or(Vec3::Y) + Vec3::new(0.3, 0.8, 0.2);
+        // Fixed world light: top brightest, the two sides clearly different.
+        let light = Vec3::new(0.35, 0.9, 0.6);
         let frame = Frame {
             view_proj: camera
                 .view_proj(width as f32 / height as f32)

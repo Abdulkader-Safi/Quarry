@@ -56,6 +56,7 @@ fn registry(dirs: &Dirs) -> CommandRegistry {
     let mut registry = CommandRegistry::new();
     registry.set_storage(Box::new(QuarryFiles {
         dirs: Some(dirs.clone()),
+        thumbnail: Some(quarry_render::thumbnail_png),
     }));
     registry
 }

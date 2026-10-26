@@ -9,6 +9,25 @@ mod gpu;
 pub mod snapshot;
 
 use glam::Mat4;
+use std::sync::{Mutex, OnceLock};
+
+/// A 256x256 iso PNG of the whole document for the recent list, or None when
+/// there is nothing to draw or no GPU.
+pub fn thumbnail_png(doc: &quarry_core::Document) -> Option<Vec<u8>> {
+    static RENDERER: OnceLock<Option<Mutex<document::DocumentRenderer>>> = OnceLock::new();
+    let renderer = RENDERER
+        .get_or_init(|| document::DocumentRenderer::new().ok().map(Mutex::new))
+        .as_ref()?
+        .lock()
+        .ok()?;
+    let snap = snapshot::snapshot(doc);
+    let (lo, hi) = snap.bounds?;
+    let mut camera = camera::OrbitCamera::preset(camera::Preset::Iso);
+    camera.frame(lo, hi);
+    renderer
+        .render_png(&snap, &camera, document::Display::default(), 256, 256)
+        .ok()
+}
 use std::time::Instant;
 use wgpu::util::DeviceExt;
 

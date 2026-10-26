@@ -45,7 +45,7 @@ fn fs_lit(in: VertexOut) -> @location(0) vec4<f32> {
     if base.a < 0.5 {
         discard;
     }
-    let shade = 0.6 + 0.4 * max(dot(normalize(in.normal), frame.light.xyz), 0.0);
+    let shade = 0.2 + 0.8 * max(dot(normalize(in.normal), frame.light.xyz), 0.0);
     return vec4<f32>(base.rgb * shade, 1.0);
 }
 

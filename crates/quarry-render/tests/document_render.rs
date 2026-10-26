@@ -19,7 +19,12 @@ fn textured_box_renders_with_nearest_filtering() {
         }
     };
     let mut r = CommandRegistry::new();
-    r.execute("mesh.add_primitive", json!({ "kind": "box" }), Source::Human).unwrap();
+    r.execute(
+        "mesh.add_primitive",
+        json!({ "kind": "box" }),
+        Source::Human,
+    )
+    .unwrap();
     // Test fixture: give every face a red 16x16 image, as tile.place will in M2.
     let mut doc = r.document().clone();
     let image = doc.images.insert(Image {
@@ -48,14 +53,19 @@ fn textured_box_renders_with_nearest_filtering() {
     let pixels = renderer.render(&snap, &camera, Display::default(), 64, 64);
     let at = |x: usize, y: usize| &pixels[(y * 64 + x) * 4..(y * 64 + x) * 4 + 4];
     let centre = at(32, 32);
-    assert!(centre[0] > 150 && centre[1] < 40 && centre[2] < 40, "centre is the red face: {centre:?}");
+    assert!(
+        centre[0] > 150 && centre[1] < 40 && centre[2] < 40,
+        "centre is the red face: {centre:?}"
+    );
     let corner = at(0, 0);
     assert!(corner[0] < 60, "corner is background: {corner:?}");
 
     if let Some(dir) = std::env::var_os("QUARRY_RENDER_OUT") {
         let mut iso = OrbitCamera::preset(Preset::Iso);
         iso.frame(lo, hi);
-        let png = renderer.render_png(&snap, &iso, Display::default(), 256, 256).unwrap();
+        let png = renderer
+            .render_png(&snap, &iso, Display::default(), 256, 256)
+            .unwrap();
         std::fs::write(std::path::Path::new(&dir).join("box-iso.png"), png).unwrap();
     }
 }
