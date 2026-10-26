@@ -254,6 +254,17 @@ pub struct View {
     pub cursor: Vec3,
     pub display: DisplayToggles,
     pub tile: TileTool,
+    pub anim: AnimTool,
+}
+
+/// The active clip, playhead and auto-key switch (FR-ANIM-02, 04).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AnimTool {
+    pub clip: Option<Id<Clip>>,
+    /// Seconds.
+    pub time: f32,
+    pub autokey: bool,
 }
 
 /// Tile brush and placement plane (FR-TILE-02, 04, 05).
@@ -695,6 +706,40 @@ impl Skeleton {
             .collect()
     }
 
+    /// Pose a two-bone chain so its tip reaches its target, bending toward
+    /// its pole (rotations stored in the bones' own frames).
+    pub fn solve_ik(&mut self, chain: usize) {
+        let Some(c) = self.ik_chains.get(chain).cloned() else {
+            return;
+        };
+        let lower = c.tip_bone as usize;
+        let Some(upper) = self
+            .bones
+            .get(lower)
+            .and_then(|b| b.parent)
+            .map(|p| p as usize)
+        else {
+            return;
+        };
+        self.pose.resize(self.bones.len(), BonePose::default());
+        let world = self.pose_world();
+        let length = self.bones[lower].head.distance(self.bones[lower].tail);
+        let root = world[upper].transform_point3(Vec3::ZERO);
+        let mid = world[lower].transform_point3(Vec3::ZERO);
+        let tip = world[lower].transform_point3(Vec3::Y * length);
+        let (q1, q2) = quarry_ops::rig::two_bone_ik(root, mid, tip, c.target, c.pole);
+        // A world rotation R at a bone whose world rotation is W is W⁻¹·R·W locally.
+        let local = |w: glam::Mat4, r: Quat| {
+            let (_, wr, _) = w.to_scale_rotation_translation();
+            wr.inverse() * r * wr
+        };
+        self.pose[upper].rotation =
+            (self.pose[upper].rotation * local(world[upper], q1)).normalize();
+        let world = self.pose_world();
+        self.pose[lower].rotation =
+            (self.pose[lower].rotation * local(world[lower], q2)).normalize();
+    }
+
     /// Skinning matrices: posed world times inverse rest world.
     pub fn skinning(&self) -> Vec<glam::Mat4> {
         self.pose_world()
@@ -735,6 +780,85 @@ pub struct Clip {
     pub tracks: Vec<Track>,
 }
 keyed!(Clip, 'c');
+
+impl Clip {
+    /// The skeleton posed by this clip at `time`: keyed channels from their
+    /// tracks, everything else at rest, then every IK chain solved (targets
+    /// and poles from their tracks when keyed). Playback, preview and export
+    /// all use this, so what plays is what exports.
+    pub fn pose_at(&self, skeleton: &Skeleton, time: f32) -> Skeleton {
+        use quarry_ops::anim::evaluate;
+        let mut s = skeleton.clone();
+        s.pose = vec![BonePose::default(); s.bones.len()];
+        for track in &self.tracks {
+            let vec_keys = || -> Vec<(f32, Vec3, quarry_ops::anim::Ease)> {
+                track
+                    .keys
+                    .iter()
+                    .filter_map(|k| match k.value {
+                        KeyValue::Vec3(v) => Some((k.time, v, k.interp.ease())),
+                        _ => None,
+                    })
+                    .collect()
+            };
+            match (track.target, track.channel) {
+                (TrackTarget::Bone(b), Channel::Rotation) if (b as usize) < s.bones.len() => {
+                    let keys: Vec<_> = track
+                        .keys
+                        .iter()
+                        .filter_map(|k| match k.value {
+                            KeyValue::Quat(q) => Some((k.time, q, k.interp.ease())),
+                            _ => None,
+                        })
+                        .collect();
+                    if let Some(q) = evaluate(&keys, time) {
+                        s.pose[b as usize].rotation = q;
+                    }
+                }
+                (TrackTarget::Bone(b), Channel::Translation) if (b as usize) < s.bones.len() => {
+                    if let Some(v) = evaluate(&vec_keys(), time) {
+                        s.pose[b as usize].translation = v;
+                    }
+                }
+                (TrackTarget::Bone(b), Channel::Scale) if (b as usize) < s.bones.len() => {
+                    if let Some(v) = evaluate(&vec_keys(), time) {
+                        s.pose[b as usize].scale = v;
+                    }
+                }
+                (TrackTarget::Ik(c), Channel::IkTarget) if (c as usize) < s.ik_chains.len() => {
+                    if let Some(v) = evaluate(&vec_keys(), time) {
+                        s.ik_chains[c as usize].target = v;
+                    }
+                }
+                (TrackTarget::Ik(c), Channel::IkPole) if (c as usize) < s.ik_chains.len() => {
+                    if let Some(v) = evaluate(&vec_keys(), time) {
+                        s.ik_chains[c as usize].pole = v;
+                    }
+                }
+                _ => {}
+            }
+        }
+        for chain in 0..s.ik_chains.len() {
+            s.solve_ik(chain);
+        }
+        s
+    }
+}
+
+impl Interp {
+    pub fn ease(self) -> quarry_ops::anim::Ease {
+        use quarry_ops::anim::Ease;
+        match self {
+            Interp::Step => Ease::Step,
+            Interp::Linear => Ease::Linear,
+            Interp::EaseIn => Ease::In,
+            Interp::EaseOut => Ease::Out,
+            // ponytail: bezier plays as ease-in-out until the graph editor
+            // (FR-ANIM-06, optional) gives it handles.
+            Interp::EaseInOut | Interp::Bezier => Ease::InOut,
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Track {

@@ -9,7 +9,7 @@ use crate::model::{
     Skin, TrackTarget,
 };
 use glam::{EulerRot, Quat, Vec3};
-use quarry_ops::rig::{auto_weights, normalise, two_bone_ik};
+use quarry_ops::rig::{auto_weights, normalise};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
@@ -724,34 +724,6 @@ impl Command for RigIkAdd {
     }
 }
 
-/// Pose a chain's two bones so the tip reaches the target (rotations in the bones' frames).
-pub(super) fn solve_chain(s: &mut Skeleton, chain: usize) {
-    let c = s.ik_chains[chain].clone();
-    let lower = c.tip_bone as usize;
-    let Some(upper) = s.bones[lower].parent.map(|p| p as usize) else {
-        return;
-    };
-    s.pose.resize(s.bones.len(), BonePose::default());
-    let world = s.pose_world();
-    let tail_of = |m: glam::Mat4, i: usize| {
-        m.transform_point3(Vec3::Y * s.bones[i].head.distance(s.bones[i].tail))
-    };
-    let (root, mid) = (
-        world[upper].transform_point3(Vec3::ZERO),
-        world[lower].transform_point3(Vec3::ZERO),
-    );
-    let tip = tail_of(world[lower], lower);
-    let (q1, q2) = two_bone_ik(root, mid, tip, c.target, c.pole);
-    // A world rotation R at a bone with world rotation W becomes W⁻¹·R·W locally.
-    let to_local = |i: usize, r: Quat, w: &[glam::Mat4]| {
-        let (_, wr, _) = w[i].to_scale_rotation_translation();
-        wr.inverse() * r * wr
-    };
-    s.pose[upper].rotation = (s.pose[upper].rotation * to_local(upper, q1, &world)).normalize();
-    let world = s.pose_world();
-    s.pose[lower].rotation = (s.pose[lower].rotation * to_local(lower, q2, &world)).normalize();
-}
-
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RigIkSet {
@@ -790,7 +762,8 @@ impl Command for RigIkSet {
         if let Some(p) = pole {
             s.ik_chains[chain].pole = p;
         }
-        solve_chain(s, chain);
+        s.solve_ik(chain);
+        let target_now = s.ik_chains[chain].target;
         let world = s.pose_world();
         let b = &s.bones[tip as usize];
         let reached = world[tip as usize].transform_point3(Vec3::Y * b.head.distance(b.tail));
@@ -799,6 +772,27 @@ impl Command for RigIkSet {
         if gap > 1e-3 {
             reply["warning"] =
                 json!("The target is out of reach; the chain stops at full stretch.");
+        }
+        // Auto-key the target (IK is keyed by its target and baked on export).
+        let tool = doc.view.anim;
+        if tool.autokey
+            && let Some(clip) = tool
+                .clip
+                .filter(|c| doc.clips.get(*c).is_some_and(|c| c.skeleton == sid))
+        {
+            let key = crate::model::Key {
+                time: tool.time,
+                value: crate::model::KeyValue::Vec3(target_now),
+                interp: crate::model::Interp::Linear,
+                handles: None,
+            };
+            let clip = doc.clips.get_mut(clip).expect("checked");
+            super::anim::upsert(
+                clip,
+                TrackTarget::Ik(chain as u16),
+                crate::model::Channel::IkTarget,
+                key,
+            );
         }
         Ok(reply)
     }
@@ -969,7 +963,9 @@ impl Command for RigPose {
         if let Some(t) = self.translation {
             s.pose[i].translation = vec3(t, "translation")?;
         }
-        Ok(json!({ "bone": self.bone, "pose": s.pose[i] }))
+        let pose = s.pose[i];
+        super::anim::autokey_bone(doc, sid, i as u16, self.translation.is_some());
+        Ok(json!({ "bone": self.bone, "pose": pose }))
     }
 }
 

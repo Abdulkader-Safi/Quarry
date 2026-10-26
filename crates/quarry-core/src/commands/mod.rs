@@ -10,6 +10,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+mod anim;
 mod art;
 mod export;
 mod mesh;
@@ -30,6 +31,7 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     export::register(r);
     paint::register(r);
     rig::register(r);
+    anim::register(r);
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
     r.register::<ProjectRecover>();

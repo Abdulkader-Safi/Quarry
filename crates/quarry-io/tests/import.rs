@@ -115,5 +115,8 @@ fn an_exported_rig_imports_back_with_the_same_rest_skeleton() {
     assert!(s.bones[1].head.distance(glam::Vec3::new(1.0, 1.0, 0.0)) < 1e-4);
     let arm = doc.objects.by_name("Arm").expect("Arm");
     assert_eq!(arm.skin.as_ref().unwrap().skeleton, s.id);
-    assert!(doc.objects.by_name("rig").is_some(), "the skeleton root node is kept as a layer");
+    assert!(
+        doc.objects.by_name("rig").is_some(),
+        "the skeleton root node is kept as a layer"
+    );
 }

@@ -9,6 +9,9 @@
 use crate::glb::GlbWriter;
 use glam::{Mat4, Vec2, Vec3};
 use gltf_json::accessor::{ComponentType, Type};
+use gltf_json::animation::{
+    Channel as AnimChannel, Interpolation, Property, Sampler as AnimSampler, Target as AnimTarget,
+};
 use gltf_json::buffer::Target;
 use gltf_json::material::{
     AlphaCutoff, AlphaMode, PbrBaseColorFactor, PbrMetallicRoughness, StrengthFactor,
@@ -72,6 +75,7 @@ pub fn export(doc: &Document, request: &ExportRequest) -> Result<Value, CommandE
         "vertices": stats.vertices,
         "triangles": stats.triangles,
         "materials": stats.materials,
+        "animations": stats.animations,
         "report": report,
     }))
 }
@@ -96,6 +100,7 @@ struct Stats {
     vertices: usize,
     triangles: usize,
     materials: usize,
+    animations: usize,
 }
 
 /// A skeleton's glTF skin and its joint node per bone.
@@ -175,6 +180,7 @@ impl<'a> Builder<'a> {
                 queue.push((kid.id, index));
             }
         }
+        self.animations();
         scene_nodes.append(&mut self.extra_roots);
         let scene = self.writer.root.push(Scene {
             extensions: None,
@@ -450,6 +456,243 @@ impl<'a> Builder<'a> {
             mode: Valid(Mode::Triangles),
             targets: None,
         }
+    }
+
+    /// One glTF animation per clip of each exported skeleton (FR-EXP-02,
+    /// FR-ANIM-05, FR-ANIM-10): sampled at the project frame rate with IK
+    /// baked into bone rotations, then reduced. STEP keys stay STEP.
+    fn animations(&mut self) {
+        let doc = self.doc;
+        let fps = doc.settings.fps;
+        let mut skins: Vec<(Id<Skeleton>, Vec<Index<Node>>)> = self
+            .skins
+            .iter()
+            .map(|(k, (_, j))| (*k, j.clone()))
+            .collect();
+        skins.sort_by_key(|(k, _)| *k);
+        for (sid, joints) in skins {
+            let Some(s) = doc.skeletons.get(sid) else {
+                continue;
+            };
+            let rest = s.rest_local();
+            let ik_bones: std::collections::HashSet<usize> = s
+                .ik_chains
+                .iter()
+                .flat_map(|c| {
+                    [
+                        Some(c.tip_bone as usize),
+                        s.bones
+                            .get(c.tip_bone as usize)
+                            .and_then(|b| b.parent)
+                            .map(|p| p as usize),
+                    ]
+                })
+                .flatten()
+                .collect();
+            let mut clips: Vec<&quarry_core::model::Clip> =
+                doc.clips.iter().filter(|c| c.skeleton == sid).collect();
+            clips.sort_by_key(|c| c.id);
+            for clip in clips {
+                let times = quarry_ops::anim::sample_times(clip.length, fps);
+                let poses: Vec<Vec<Mat4>> = times
+                    .iter()
+                    .map(|t| {
+                        let posed = clip.pose_at(s, *t);
+                        (0..s.bones.len())
+                            .map(|b| rest[b] * posed.pose_of(b).matrix())
+                            .collect()
+                    })
+                    .collect();
+                let mut channels = Vec::new();
+                let mut samplers = Vec::new();
+                for b in 0..s.bones.len() {
+                    let (rest_s, rest_r, rest_t) = rest[b].to_scale_rotation_translation();
+                    let trs: Vec<(Vec3, glam::Quat, Vec3)> = poses
+                        .iter()
+                        .map(|p| p[b].to_scale_rotation_translation())
+                        .collect();
+                    // Bones keyed only with step keys (and free of IK) keep them.
+                    let step_times: Option<Vec<f32>> = (!ik_bones.contains(&b))
+                        .then(|| {
+                            let tracks: Vec<_> = clip
+                                .tracks
+                                .iter()
+                                .filter(|t| {
+                                    t.target == quarry_core::model::TrackTarget::Bone(b as u16)
+                                })
+                                .collect();
+                            (!tracks.is_empty()
+                                && tracks.iter().all(|t| {
+                                    t.keys
+                                        .iter()
+                                        .all(|k| k.interp == quarry_core::model::Interp::Step)
+                                }))
+                            .then(|| {
+                                tracks
+                                    .iter()
+                                    .flat_map(|t| t.keys.iter().map(|k| k.time))
+                                    .collect()
+                            })
+                        })
+                        .flatten();
+                    let at = |time: f32| -> (Vec3, glam::Quat, Vec3) {
+                        (rest[b] * clip.pose_at(s, time).pose_of(b).matrix())
+                            .to_scale_rotation_translation()
+                    };
+                    let rotations: Vec<(f32, glam::Quat)> = times
+                        .iter()
+                        .zip(&trs)
+                        .map(|(t, (_, r, _))| (*t, *r))
+                        .collect();
+                    let translations: Vec<(f32, Vec3)> = times
+                        .iter()
+                        .zip(&trs)
+                        .map(|(t, (_, _, tr))| (*t, *tr))
+                        .collect();
+                    let scales: Vec<(f32, Vec3)> = times
+                        .iter()
+                        .zip(&trs)
+                        .map(|(t, (sc, _, _))| (*t, *sc))
+                        .collect();
+                    let moves_r = rotations
+                        .iter()
+                        .any(|(_, r)| r.angle_between(rest_r).to_degrees() > 1e-3);
+                    let moves_t = translations.iter().any(|(_, t)| t.distance(rest_t) > 1e-6);
+                    let moves_s = scales.iter().any(|(_, sc)| sc.distance(rest_s) > 1e-6);
+                    for (path, moves) in [
+                        (Property::Rotation, moves_r),
+                        (Property::Translation, moves_t),
+                        (Property::Scale, moves_s),
+                    ] {
+                        if !moves {
+                            continue;
+                        }
+                        let (input, output, interpolation) = match (&step_times, path) {
+                            (Some(keys), _) => {
+                                let mut keys = keys.clone();
+                                keys.sort_by(f32::total_cmp);
+                                keys.dedup();
+                                let values: Vec<(Vec3, glam::Quat, Vec3)> =
+                                    keys.iter().map(|t| at(*t)).collect();
+                                let output = match path {
+                                    Property::Rotation => {
+                                        self.vec4s(values.iter().map(|v| v.1.to_array()).collect())
+                                    }
+                                    Property::Translation => {
+                                        self.vec3s(values.iter().map(|v| v.2.into()).collect())
+                                    }
+                                    _ => self.vec3s(values.iter().map(|v| v.0.into()).collect()),
+                                };
+                                (keys, output, Interpolation::Step)
+                            }
+                            (None, Property::Rotation) => {
+                                let reduced = quarry_ops::anim::reduce(&rotations, 0.05);
+                                let output =
+                                    self.vec4s(reduced.iter().map(|(_, q)| q.to_array()).collect());
+                                (
+                                    reduced.iter().map(|(t, _)| *t).collect(),
+                                    output,
+                                    Interpolation::Linear,
+                                )
+                            }
+                            (None, Property::Translation) => {
+                                let reduced = quarry_ops::anim::reduce(&translations, 1e-4);
+                                let output =
+                                    self.vec3s(reduced.iter().map(|(_, v)| (*v).into()).collect());
+                                (
+                                    reduced.iter().map(|(t, _)| *t).collect(),
+                                    output,
+                                    Interpolation::Linear,
+                                )
+                            }
+                            (None, _) => {
+                                let reduced = quarry_ops::anim::reduce(&scales, 1e-4);
+                                let output =
+                                    self.vec3s(reduced.iter().map(|(_, v)| (*v).into()).collect());
+                                (
+                                    reduced.iter().map(|(t, _)| *t).collect(),
+                                    output,
+                                    Interpolation::Linear,
+                                )
+                            }
+                        };
+                        let input = self.writer.accessor(
+                            &input,
+                            ComponentType::F32,
+                            Type::Scalar,
+                            None,
+                            true,
+                        );
+                        samplers.push(AnimSampler {
+                            extensions: None,
+                            extras: Default::default(),
+                            input,
+                            interpolation: Valid(interpolation),
+                            output,
+                        });
+                        channels.push(AnimChannel {
+                            sampler: Index::new(samplers.len() as u32 - 1),
+                            target: AnimTarget {
+                                extensions: None,
+                                extras: Default::default(),
+                                node: joints[b],
+                                path: Valid(path),
+                            },
+                            extensions: None,
+                            extras: Default::default(),
+                        });
+                    }
+                }
+                if channels.is_empty() {
+                    // glTF needs one channel; a still clip holds the root bone at rest.
+                    let input = self.writer.accessor(
+                        &[0.0f32, clip.length],
+                        ComponentType::F32,
+                        Type::Scalar,
+                        None,
+                        true,
+                    );
+                    let (_, r, _) = rest[0].to_scale_rotation_translation();
+                    let output = self.vec4s(vec![r.to_array(), r.to_array()]);
+                    samplers.push(AnimSampler {
+                        extensions: None,
+                        extras: Default::default(),
+                        input,
+                        interpolation: Valid(Interpolation::Linear),
+                        output,
+                    });
+                    channels.push(AnimChannel {
+                        sampler: Index::new(0),
+                        target: AnimTarget {
+                            extensions: None,
+                            extras: Default::default(),
+                            node: joints[0],
+                            path: Valid(Property::Rotation),
+                        },
+                        extensions: None,
+                        extras: Default::default(),
+                    });
+                }
+                self.stats.animations += 1;
+                self.writer.root.push(gltf_json::Animation {
+                    extensions: None,
+                    extras: Default::default(),
+                    channels,
+                    name: Some(clip.name.clone()),
+                    samplers,
+                });
+            }
+        }
+    }
+
+    fn vec3s(&mut self, v: Vec<[f32; 3]>) -> Index<gltf_json::Accessor> {
+        self.writer
+            .accessor(&v, ComponentType::F32, Type::Vec3, None, false)
+    }
+
+    fn vec4s(&mut self, v: Vec<[f32; 4]>) -> Index<gltf_json::Accessor> {
+        self.writer
+            .accessor(&v, ComponentType::F32, Type::Vec4, None, false)
     }
 
     /// The glTF skin for a skeleton: joint nodes in rest pose under a root
