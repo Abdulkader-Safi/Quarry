@@ -1,0 +1,16 @@
+# cargo-packager 0.11.8. `cargo packager --release --formats app,dmg` on macOS,
+# `--formats nsis` on Windows, `--formats appimage` on Linux. CI builds all of
+# them when a v* tag is pushed. Unsigned for v1 (see README).
+name = "quarry"
+productName = "Quarry"
+version = "0.1.0"
+identifier = "com.safi.quarry"
+description = "Low-poly modeler and level builder. Every action is also an MCP tool."
+authors = ["Abdulkader Safi"]
+outDir = "target/packages"
+binariesDir = "target/release"
+beforePackagingCommand = "cargo build --release -p quarry -p quarry-mcp"
+binaries = [
+  { path = "quarry", main = true },
+  { path = "quarry-mcp", main = false },
+]

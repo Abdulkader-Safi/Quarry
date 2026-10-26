@@ -6,13 +6,11 @@ It is a personal tool: local only, no accounts, no network.
 
 ## Status
 
-Quarry is at milestone M0, which de-risks the stack before any feature work starts. What runs today is a set of spikes, not the editor:
+Everything except the editor window works today, headless and through MCP. That covers projects, autosave and crash recovery, tiles and live-linked art, mesh editing, UVs, painting, rigging with IK, animation, and glTF export and import. An agent can build, texture, rig, animate and export a model through `quarry-mcp` (`cargo run -p xtask -- agent-session`).
 
-- a GPUI window showing a wgpu render of 100k triangles over 5 skinned meshes, with a pen pressure readout
-- our own GLB writer and a 3-bone bending bar that passes the Khronos glTF Validator
-- a PSD reader that takes the flattened image Affinity or Photoshop saved
+The GPUI editor itself (start screen, panels, viewport input, timeline) is next and follows the Figma design. What runs as a window today is still the M0 viewport spike.
 
-`PROGRESS.md` has the measurements and decisions so far. `docs/spec/06-build-spec.md` is the full plan, and `research/Quarry-Todo/` holds the task board.
+`PROGRESS.md` has the measurements and decisions. `docs/spec/06-build-spec.md` is the full plan, and `research/Quarry-Todo/` holds the task board.
 
 ## Requirements
 
@@ -74,6 +72,10 @@ Agents can write files only inside the open project's folder (or the folder a he
 ```bash
 cargo run -p xtask -- validate-gltf                      # Khronos validator over tests/goldens
 cargo run -p xtask -- psd-check file.psd flattened.png   # compare a PSD's composite with its PNG export
+cargo run -p xtask -- agent-session                      # a scripted agent builds and exports a crate over MCP
+cargo run -p xtask -- samples                            # rebuild assets/samples (CC0 tileset, sample robot)
+cargo run -p xtask -- no-network                         # prove no HTTP, TLS or sockets
+cargo run --release -p xtask -- bench                    # time save, open and export of 100k triangles
 ```
 
 `validate-gltf` installs the validator from npm into `xtask/validator/node_modules` the first time it runs.
@@ -110,6 +112,25 @@ xtask/             validate-gltf, psd-check
 tests/goldens/     golden .glb exports
 docs/spec/         product spec, 01 to 06
 ```
+
+## Install a release
+
+Releases are built by CI when a `v*` tag is pushed (`.github/workflows/release.yml`): a `.dmg` for Apple Silicon and one for Intel Macs, an NSIS installer for Windows, and an AppImage for Linux. v1 is not code-signed, so each OS asks once:
+
+- **macOS:** open the `.dmg`, drag Quarry to Applications, then right-click Quarry and choose Open, and Open again. Or run `xattr -dr com.apple.quarantine /Applications/Quarry.app`.
+- **Windows:** SmartScreen says "Windows protected your PC". Click "More info", then "Run anyway".
+- **Linux:** `chmod +x Quarry_*.AppImage`, then run it. Ubuntu 22.04 needs `libfuse2` (`sudo apt install libfuse2`).
+
+To build an installer yourself, for the OS you are on:
+
+```bash
+cargo install cargo-packager --version 0.11.8 --locked
+cargo packager --release --formats app,dmg      # macOS
+cargo packager --release --formats nsis         # Windows
+cargo packager --release --formats appimage     # Linux
+```
+
+Installers land in `target/packages/`. Both `quarry` and `quarry-mcp` are inside, so `quarry-mcp` can start a headless Quarry when no window is open.
 
 ## Licence
 

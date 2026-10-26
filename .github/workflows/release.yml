@@ -1,0 +1,46 @@
+name: Release
+
+# Push a tag like v1.0.0 to build unsigned installers for every platform and
+# attach them to a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14        # Apple Silicon
+            formats: app,dmg
+          - os: macos-13        # Intel
+            formats: app,dmg
+          - os: windows-latest
+            formats: nsis
+          - os: ubuntu-22.04
+            formats: appimage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.1"
+      - uses: Swatinem/rust-cache@v2
+      - name: Linux libraries for GPUI
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            libx11-xcb-dev libxcb1-dev libfontconfig-dev libvulkan-dev libfuse2
+      - run: cargo install cargo-packager --version 0.11.8 --locked
+      - run: cargo packager --release --formats ${{ matrix.formats }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/packages/*.dmg
+            target/packages/*.exe
+            target/packages/*.AppImage
