@@ -1,7 +1,7 @@
 //! Windows and Linux presentation: GPUI has no zero-copy surface element there,
 //! so the frame is copied back to RAM and handed to GPUI as an image.
 
-use gpui_kit::{AnyElement, ImageSource, RenderImage, img};
+use gpui_kit::{AnyElement, ImageSource, IntoElement as _, RenderImage, Styled as _, img};
 use std::sync::Arc;
 
 pub struct Presenter {
@@ -39,5 +39,5 @@ fn snapshot(renderer: &quarry_render::Renderer) -> Arc<RenderImage> {
     let pixels = renderer.read_target();
     let buffer = image::RgbaImage::from_raw(renderer.width(), renderer.height(), pixels)
         .expect("readback matches the target size");
-    Arc::new(RenderImage::new(image::Frame::new(buffer)))
+    Arc::new(RenderImage::new([image::Frame::new(buffer)]))
 }
