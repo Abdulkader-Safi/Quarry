@@ -1,0 +1,9 @@
+[package]
+name = "quarry-mcp"
+description = "rmcp stdio server bridging to quarry-server."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

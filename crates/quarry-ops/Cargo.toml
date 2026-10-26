@@ -1,0 +1,9 @@
+[package]
+name = "quarry-ops"
+description = "Mesh, UV, tile, paint, weights, IK and animation sampling as pure functions."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

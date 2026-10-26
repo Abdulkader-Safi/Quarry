@@ -1,0 +1,26 @@
+---
+id: "m7-timeline-keys-2026-10-26"
+status: "todo"
+priority: "medium"
+assignee: "safi"
+dueDate: null
+created: "2026-10-26T09:57:15.000Z"
+modified: "2026-10-26T09:57:15.000Z"
+labels: ["m7", "anim", "ui"]
+order: 60
+---
+
+# M7 · Timeline, tracks, keys and interpolation
+
+FR-ANIM-02 and FR-ANIM-03. The largest UI element after the viewport.
+
+**Build**
+- Timeline element: track tree per bone, T/R/S channels, key diamonds, playhead, zoom and pan.
+- Add, move, copy, paste, delete keys; auto-key toggle; multi-select and box-select keys.
+- Per-key interpolation: step, linear, ease in, ease out, ease in/out (bezier handles are M7 optional).
+- Snapping to frames and to other keys; undo per edit.
+
+**Done when**
+- [ ] With auto-key on, rotate a bone at 0.5 s: a rotation key appears at 0.5 s.
+- [ ] Copy keys from 0–1 s and paste at 2 s: values match, times shift.
+- [ ] A step key makes playback jump instead of blending.

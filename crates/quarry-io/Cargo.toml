@@ -1,0 +1,9 @@
+[package]
+name = "quarry-io"
+description = ".quarry zip, migrations, glTF in/out, PNG/PSD, watcher and settings."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

@@ -1,0 +1,9 @@
+[package]
+name = "quarry"
+description = "GPUI app: views, panels, viewport element, input, timeline."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
