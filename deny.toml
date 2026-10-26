@@ -27,6 +27,7 @@ confidence-threshold = 0.93
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"
@@ -34,3 +35,15 @@ unknown-git = "deny"
 
 [advisories]
 yanked = "deny"
+# Unmaintained (no vulnerability) crates that come in through the pinned GPUI tree.
+# We do not own them; drop an entry when GPUI drops the crate.
+ignore = [
+  "RUSTSEC-2024-0384", # instant
+  "RUSTSEC-2024-0436", # paste
+  "RUSTSEC-2025-0134", # rustls-pemfile
+  "RUSTSEC-2026-0206", # rustybuzz
+  "RUSTSEC-2026-0192", # ttf-parser
+  "RUSTSEC-2026-0371", # zbus_names
+  "RUSTSEC-2026-0370", # zvariant
+  "RUSTSEC-2026-0372", # zvariant_derive
+]
