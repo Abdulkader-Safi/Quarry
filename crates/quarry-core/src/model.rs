@@ -181,6 +181,44 @@ pub struct View {
     /// The 3D crosshair: where tiles, primitives, bones and markers go.
     pub cursor: Vec3,
     pub display: DisplayToggles,
+    pub tile: TileTool,
+}
+
+/// Tile brush and placement plane (FR-TILE-02, 04, 05).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TileTool {
+    pub brush: Option<Brush>,
+    /// The plane's normal axis; Y is the floor.
+    pub axis: Axis,
+    /// Degrees about the plane's first axis.
+    pub tilt: f32,
+}
+
+impl Default for TileTool {
+    fn default() -> Self {
+        Self {
+            brush: None,
+            axis: Axis::Y,
+            tilt: 0.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Brush {
+    pub tileset: Id<Image>,
+    /// Top-left tile column and row, and the brush size in tiles.
+    pub col: u32,
+    pub row: u32,
+    pub width: u32,
+    pub height: u32,
+    /// Quarter turns counter-clockwise.
+    pub rotate: u8,
+    /// Left-right.
+    pub mirror: bool,
+    /// Top-bottom.
+    pub flip: bool,
 }
 
 /// FR-VIEW-05.
@@ -385,11 +423,18 @@ pub struct Image {
     pub source_path: Option<String>,
     pub source_hash: u64,
     pub filter: Filter,
+    /// Reload when the linked file changes (FR-ART-02).
+    #[serde(default = "watch_default")]
+    pub watch: bool,
     /// sRGB RGBA8, row-major. Lives in the PNG, not in project.json.
     #[serde(skip)]
     pub pixels: Arc<[u8]>,
 }
 keyed!(Image, 'i');
+
+fn watch_default() -> bool {
+    true
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]

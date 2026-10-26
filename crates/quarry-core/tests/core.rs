@@ -26,6 +26,7 @@ fn full_document() -> Document {
         source_path: Some("/art/tiles.psd".into()),
         source_hash: 0xDEAD_BEEF,
         filter: Filter::Nearest,
+        watch: true,
         pixels: Arc::from(vec![]),
     });
     let skeleton = doc.skeletons.insert(Skeleton {

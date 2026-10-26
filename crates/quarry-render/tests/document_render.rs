@@ -39,6 +39,7 @@ fn textured_box_renders_with_nearest_filtering() {
         source_path: None,
         source_hash: 0,
         filter: Filter::Nearest,
+        watch: true,
         pixels: Arc::from([255u8, 0, 0, 255].repeat(256)),
     });
     let id = doc.objects.ids().next().unwrap();

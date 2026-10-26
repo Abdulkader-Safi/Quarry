@@ -82,6 +82,15 @@ pub trait Storage: Send + Sync {
     fn save(&self, doc: &Document, path: &Path) -> Result<(), CommandError>;
     /// Load an autosave and the project file it belongs to (None if never saved).
     fn recover(&self, autosave: &Path) -> Result<(Document, Option<PathBuf>), CommandError>;
+    /// Read a PNG or PSD (flattened) as sRGB RGBA8.
+    fn read_image(&self, path: &Path) -> Result<LoadedImage, CommandError>;
+}
+
+pub struct LoadedImage {
+    pub size: [u32; 2],
+    pub pixels: Vec<u8>,
+    /// Hash of the file bytes, compared on reload (FR-ART-02).
+    pub hash: u64,
 }
 
 /// What a command can see and change. Edits go to `state`, a working copy.

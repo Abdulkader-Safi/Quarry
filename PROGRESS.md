@@ -10,7 +10,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 |---|-------|-------|-------|
 | M0 | De-risk: workspace, CI, viewport, pen, skin, PSD | in progress | |
 | M1 | Core, shell, command server | in progress | core, file, autosave, settings, server, MCP done; app shell waits for the Figma design |
-| M2 | Tiles and linked images | not started | |
+| M2 | Tiles and linked images | in progress | tile and art commands done headless; watcher next; UI waits for the design |
 | M3 | Mesh editing, UVs, scene | not started | |
 | M4 | Painting | not started | |
 | M5 | glTF export and import | not started | |
@@ -65,4 +65,12 @@ Both rows still need a run on the M1 Air 8 GB.
   autosave while keeping the project's own file path, and every change goes through a command.
 - 2026-10-26: Tilesets and textures share one `images` arena with a `role` field (spec lists two
   lists). Same data, one lookup by name or ID.
+- 2026-10-26: **Backend of later milestones goes ahead of the M1 app shell.** Safi has a Figma design
+  for the app; the GPUI shell, panels and input wait for it. Meanwhile each milestone's commands,
+  ops, io and tests are built headless (M2 tiles next), so the UI work only has to wire them up.
+  The M1 gate (exit demo in the open window) stays open until the shell lands.
+- 2026-10-26: Added `art.watch(image, watch)`. The live-refresh card asks for a per-image watch
+  toggle that is saved, and every user-facing action is a command.
+- 2026-10-26: Tile cells are 1 m with cell (0, 0) at the crosshair; tiles go into a mesh object named
+  "Tiles" unless another is named. Tileset padding is both the margin and the gap between tiles.
 

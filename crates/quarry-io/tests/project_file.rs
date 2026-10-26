@@ -24,6 +24,7 @@ fn image(name: &str, role: ImageRole, w: u32, h: u32, seed: u8) -> Image {
         source_path: Some(format!("/art/{name}.png")),
         source_hash: seed as u64,
         filter: Filter::Nearest,
+        watch: true,
         pixels: Arc::from(pixels),
     }
 }

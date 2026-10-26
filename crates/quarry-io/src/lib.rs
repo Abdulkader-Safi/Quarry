@@ -2,6 +2,7 @@
 
 pub mod autosave;
 pub mod glb;
+pub mod images;
 pub mod logging;
 pub mod migrate;
 pub mod project;

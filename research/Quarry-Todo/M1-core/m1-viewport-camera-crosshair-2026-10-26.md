@@ -1,11 +1,11 @@
 ---
 id: "m1-viewport-camera-crosshair-2026-10-26"
-status: "in-progress"
+status: "todo"
 priority: "critical"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T21:00:00.000Z"
+modified: "2026-10-26T22:30:00.000Z"
 labels: ["m1", "render", "ui"]
 order: 18
 ---

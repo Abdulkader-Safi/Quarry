@@ -60,6 +60,10 @@ impl Storage for QuarryFiles {
         Ok(())
     }
 
+    fn read_image(&self, path: &Path) -> Result<quarry_core::command::LoadedImage, CommandError> {
+        crate::images::load_image(path)
+    }
+
     fn recover(&self, autosave: &Path) -> Result<(Document, Option<PathBuf>), CommandError> {
         let doc = read_project(autosave)?;
         let sidecar: Option<autosave::Sidecar> = std::fs::read(autosave.with_extension("json"))

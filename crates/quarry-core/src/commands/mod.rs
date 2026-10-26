@@ -10,7 +10,12 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+mod art;
+mod tile;
+
 pub(crate) fn register_all(r: &mut CommandRegistry) {
+    tile::register(r);
+    art::register(r);
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
     r.register::<ProjectRecover>();
