@@ -4,6 +4,8 @@
 //! 100k triangles across 5 skinned meshes with 50 bones. Presentation is the app's job.
 
 pub mod camera;
+pub mod document;
+mod gpu;
 pub mod snapshot;
 
 use glam::Mat4;
@@ -70,21 +72,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(width: u32, height: u32) -> Result<Self, String> {
-        let mut instance_desc = wgpu::InstanceDescriptor::new_without_display_handle();
-        instance_desc.backends =
-            wgpu::Backends::METAL | wgpu::Backends::VULKAN | wgpu::Backends::DX12;
-        let instance = wgpu::Instance::new(instance_desc);
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            ..Default::default()
-        }))
-        .map_err(|e| format!("no GPU adapter: {e}"))?;
-
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("quarry"),
-            ..Default::default()
-        }))
-        .map_err(|e| format!("no GPU device: {e}"))?;
+        let (device, queue) = gpu::device()?;
 
         let format = wgpu::TextureFormat::Bgra8Unorm;
 
@@ -329,58 +317,13 @@ impl Renderer {
 
     /// Copy the colour target back to the CPU. Forces the GPU work to complete.
     pub fn read_target(&self) -> Vec<u8> {
-        let unpadded = self.width * 4;
-        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let padded = unpadded.div_ceil(align) * align;
-        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("readback"),
-            size: (padded * self.height) as u64,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                texture: &self.target,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &buffer,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded),
-                    rows_per_image: Some(self.height),
-                },
-            },
-            wgpu::Extent3d {
-                width: self.width,
-                height: self.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        let submission = self.queue.submit([encoder.finish()]);
-
-        let (tx, rx) = std::sync::mpsc::channel();
-        buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        let _ = self.device.poll(wgpu::PollType::Wait {
-            submission_index: Some(submission),
-            timeout: Some(std::time::Duration::from_secs(5)),
-        });
-        let _ = rx.recv_timeout(std::time::Duration::from_secs(5));
-
-        let mapped = buffer.slice(..).get_mapped_range().expect("map readback");
-        let mut out = Vec::with_capacity((unpadded * self.height) as usize);
-        for row in 0..self.height {
-            let start = (row * padded) as usize;
-            out.extend_from_slice(&mapped[start..start + unpadded as usize]);
-        }
-        out
+        gpu::read_texture(
+            &self.device,
+            &self.queue,
+            &self.target,
+            self.width,
+            self.height,
+        )
     }
 
     pub fn wait(&self) {
