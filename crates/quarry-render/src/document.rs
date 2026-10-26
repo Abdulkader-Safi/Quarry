@@ -5,30 +5,12 @@ use crate::camera::OrbitCamera;
 use crate::gpu;
 use crate::snapshot::{DocVertex, Snapshot};
 use glam::Vec3;
-use quarry_core::model::Filter;
+use quarry_core::model::{DisplayToggles as Display, Filter};
 use wgpu::util::DeviceExt;
 
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const GRID_LINES: i32 = 20;
-
-/// FR-VIEW-05 toggles the renderer handles so far.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Display {
-    pub grid: bool,
-    pub textured: bool,
-    pub backface_culling: bool,
-}
-
-impl Default for Display {
-    fn default() -> Self {
-        Self {
-            grid: true,
-            textured: true,
-            backface_culling: true,
-        }
-    }
-}
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]

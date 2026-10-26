@@ -382,3 +382,78 @@ fn every_command_lists_a_schema_and_description() {
         );
     }
 }
+
+#[test]
+fn view_changes_stay_out_of_history_and_undo_keeps_the_view() {
+    let mut r = CommandRegistry::new();
+    run(&mut r, "mesh.add_primitive", json!({ "kind": "box" })).unwrap();
+    run(&mut r, "view.camera", json!({ "preset": "top" })).unwrap();
+    run(&mut r, "view.display", json!({ "grid": false })).unwrap();
+    assert_eq!(r.history().entries().len(), 1, "only the box is an edit");
+    let view = r.document().view;
+    run(&mut r, "history.undo", json!({})).unwrap();
+    assert!(r.document().objects.is_empty());
+    assert_eq!(
+        r.document().view,
+        view,
+        "undo leaves the camera and toggles alone"
+    );
+}
+
+#[test]
+fn primitives_land_on_the_snapped_crosshair() {
+    let mut r = CommandRegistry::new();
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "box", "position": [3, 0, 0], "name": "A" }),
+    )
+    .unwrap();
+    run(
+        &mut r,
+        "view.cursor",
+        json!({ "position": [9, 9, 9], "snap_to": "vertex", "object": "A" }),
+    )
+    .unwrap();
+    assert_eq!(r.document().view.cursor, Vec3::new(3.5, 0.5, 0.5));
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "box", "name": "B" }),
+    )
+    .unwrap();
+    let b = r.document().objects.by_name("B").unwrap();
+    assert_eq!(b.transform.translation, Vec3::new(3.5, 0.5, 0.5));
+
+    run(
+        &mut r,
+        "view.cursor",
+        json!({ "position": [1.4, 0.6, -2.5], "snap_to": "grid" }),
+    )
+    .unwrap();
+    assert_eq!(r.document().view.cursor, Vec3::new(1.0, 1.0, -3.0));
+    let err = run(&mut r, "view.cursor", json!({ "snap_to": "object" })).unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidArgs);
+}
+
+#[test]
+fn frame_centres_the_named_object() {
+    let mut r = CommandRegistry::new();
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "box", "position": [40, -3, 25] }),
+    )
+    .unwrap();
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "box", "name": "Near" }),
+    )
+    .unwrap();
+    run(&mut r, "view.frame", json!({ "objects": ["Box"] })).unwrap();
+    assert_eq!(r.document().view.camera.target, Vec3::new(40.0, -3.0, 25.0));
+    run(&mut r, "project.new", json!({})).unwrap();
+    let err = run(&mut r, "view.frame", json!({})).unwrap_err();
+    assert_eq!(err.code, ErrorCode::NothingSelected);
+}

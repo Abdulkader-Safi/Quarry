@@ -25,3 +25,11 @@ FR-VIEW-01 to FR-VIEW-05. Bring the M0 spike into the real app.
 - [ ] Iso preset shows a cube with three equal visible faces.
 - [ ] Frame one far vertex: it is centred.
 - [ ] Snap to a vertex, add a bone (M6): the bone head sits on that vertex.
+
+## Progress 2026-10-26
+
+- `quarry-core::camera::OrbitCamera`: front, side, top and iso presets, orbit, pan, zoom, frame. Iso shows a cube's three faces equal (test); framing a far point centres it (test).
+- `Document.view` (camera, crosshair, display toggles) is saved with the project and never enters undo; undo and redo keep the current view.
+- Commands: `view.camera` (preset, position/target, ortho), `view.frame` (objects or all), `view.cursor` (position, snap to grid, an object's nearest vertex or its origin), `view.display` (all seven FR-VIEW-05 toggles). `mesh.add_primitive` lands on the crosshair.
+- `quarry-render`: `snapshot()` (world-space batches per image) and `DocumentRenderer` (textures with each image's filter, grid with X/Z axes, backface culling and textured toggles, RGBA/PNG readback). `thumbnail_png` writes the 256 px iso `thumbnail.png` into saved projects.
+- Left for the app (Figma design): the viewport element, mouse/trackpad/keyboard camera input, the crosshair overlay, and the wireframe, vertex colour, weights and bones toggles in the renderer.

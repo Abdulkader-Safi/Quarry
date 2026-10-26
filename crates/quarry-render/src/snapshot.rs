@@ -3,7 +3,7 @@
 
 use glam::{Mat4, Vec3};
 use quarry_core::id::Id;
-use quarry_core::model::{Document, Filter, Image, Mesh, Object};
+use quarry_core::model::{Document, Filter, Image, Mesh};
 use std::sync::Arc;
 
 #[repr(C)]
@@ -43,31 +43,16 @@ impl Snapshot {
     }
 }
 
-/// World matrix of `object`, following parents (cycles cut at 64 levels).
-pub fn world_matrix(doc: &Document, object: &Object) -> Mat4 {
-    let mut matrix = Mat4::IDENTITY;
-    let mut current = Some(object);
-    for _ in 0..64 {
-        let Some(o) = current else { break };
-        let t = &o.transform;
-        matrix = Mat4::from_scale_rotation_translation(t.scale, t.rotation, t.translation) * matrix;
-        current = o.parent.and_then(|p| doc.objects.get(p));
-    }
-    matrix
-}
-
 pub fn snapshot(doc: &Document) -> Snapshot {
     let mut batches: Vec<Batch> = Vec::new();
     let mut bounds: Option<(Vec3, Vec3)> = None;
 
     for object in doc.objects.iter().filter(|o| o.visible) {
         // Instances draw their source's mesh with their own transform.
-        let mesh = match object.instance_of {
-            Some(source) => doc.objects.get(source).and_then(|s| s.mesh.as_deref()),
-            None => object.mesh.as_deref(),
+        let Some(mesh) = doc.drawn_mesh(object) else {
+            continue;
         };
-        let Some(mesh) = mesh else { continue };
-        let world = world_matrix(doc, object);
+        let world = doc.world_matrix(object);
         add_mesh(doc, mesh, world, &mut batches, &mut bounds);
     }
 

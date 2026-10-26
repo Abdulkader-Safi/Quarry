@@ -28,6 +28,10 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     r.register::<SceneLock>();
     r.register::<SceneDelete>();
     r.register::<MeshAddPrimitive>();
+    r.register::<ViewCamera>();
+    r.register::<ViewFrame>();
+    r.register::<ViewCursor>();
+    r.register::<ViewDisplay>();
 }
 
 /// Resolve an object by ID ("o3g1") or name.
@@ -542,7 +546,7 @@ pub struct MeshAddPrimitive {
     pub kind: Primitive,
     /// Size in metres [x, y, z]. Default [1, 1, 1].
     pub size: Option<[f32; 3]>,
-    /// Centre in metres [x, y, z]. Default the origin.
+    /// Centre in metres [x, y, z]. Default the 3D crosshair.
     pub position: Option<[f32; 3]>,
     /// Object name. Default the shape's name, made unique.
     pub name: Option<String>,
@@ -561,7 +565,7 @@ impl Command for MeshAddPrimitive {
                 "size must be three positive numbers of metres.",
             ));
         }
-        let position = Vec3::from(self.position.unwrap_or([0.0; 3]));
+        let position = self.position.map_or(cx.state.doc.view.cursor, Vec3::from);
         if !position.is_finite() {
             return Err(CommandError::invalid(
                 "position must be three finite numbers.",
@@ -618,5 +622,207 @@ impl Command for MeshAddPrimitive {
         let id = doc.objects.insert(object);
         let name = &doc.objects.get(id).expect("inserted").name;
         Ok(json!({ "id": id, "name": name }))
+    }
+}
+
+// ---- view ------------------------------------------------------------------
+// The view is saved with the project but never enters undo history.
+
+fn vec3(v: [f32; 3], what: &str) -> Result<Vec3, CommandError> {
+    let v = Vec3::from(v);
+    if v.is_finite() {
+        Ok(v)
+    } else {
+        Err(CommandError::invalid(format!(
+            "{what} must be three finite numbers."
+        )))
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ViewCamera {
+    /// Jump to a preset view: front, side, top or iso.
+    pub preset: Option<crate::camera::Preset>,
+    /// Look at this point [x, y, z] in metres.
+    pub target: Option<[f32; 3]>,
+    /// Put the camera here [x, y, z] in metres (with target, or the current target).
+    pub position: Option<[f32; 3]>,
+    /// Orthographic (true) or perspective (false).
+    pub ortho: Option<bool>,
+}
+
+impl Command for ViewCamera {
+    const NAME: &'static str = "view.camera";
+    const DESCRIPTION: &'static str = "Move the viewport camera: a preset (front, side, top, iso), a position and target, or switch orthographic and perspective.";
+    const UNDOABLE: bool = false;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let mut camera = cx.state.doc.view.camera;
+        if let Some(preset) = self.preset {
+            let keep = (camera.target, camera.distance);
+            camera = crate::camera::OrbitCamera::preset(preset);
+            (camera.target, camera.distance) = keep;
+        }
+        if let Some(target) = self.target {
+            camera.target = vec3(target, "target")?;
+        }
+        if let Some(position) = self.position {
+            let offset = vec3(position, "position")? - camera.target;
+            if offset.length() < 1e-4 {
+                return Err(CommandError::invalid(
+                    "The camera position must differ from its target.",
+                ));
+            }
+            camera.distance = offset.length();
+            camera.pitch = (offset.y / camera.distance).asin();
+            camera.yaw = offset.x.atan2(offset.z);
+        }
+        if let Some(ortho) = self.ortho {
+            camera.ortho = ortho;
+        }
+        cx.doc().view.camera = camera;
+        Ok(json!({ "camera": camera }))
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ViewFrame {
+    /// Objects to frame by ID or name. Default: everything.
+    #[serde(default)]
+    pub objects: Vec<String>,
+}
+
+impl Command for ViewFrame {
+    const NAME: &'static str = "view.frame";
+    const DESCRIPTION: &'static str =
+        "Centre the viewport on objects (or everything) and zoom to fit them.";
+    const UNDOABLE: bool = false;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let doc = &cx.state.doc;
+        let bounds = if self.objects.is_empty() {
+            doc.bounds(doc.objects.iter())
+        } else {
+            let ids = objects(doc, &self.objects)?;
+            doc.bounds(ids.iter().filter_map(|id| doc.objects.get(*id)))
+        };
+        let Some((lo, hi)) = bounds else {
+            return Err(CommandError::new(
+                ErrorCode::NothingSelected,
+                "The scene is empty, so there is nothing to frame. Add a primitive first.",
+            ));
+        };
+        cx.doc().view.camera.frame(lo, hi);
+        Ok(json!({ "camera": cx.state.doc.view.camera }))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SnapTo {
+    /// Round to the project grid.
+    Grid,
+    /// The nearest vertex of `object`.
+    Vertex,
+    /// The origin of `object`.
+    Object,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ViewCursor {
+    /// Move the crosshair here [x, y, z] in metres (before any snap).
+    pub position: Option<[f32; 3]>,
+    pub snap_to: Option<SnapTo>,
+    /// Object ID or name for vertex and object snapping.
+    pub object: Option<String>,
+}
+
+impl Command for ViewCursor {
+    const NAME: &'static str = "view.cursor";
+    const DESCRIPTION: &'static str = "Move the 3D crosshair, where tiles, primitives, bones and markers are placed. Snap to the grid, an object's nearest vertex, or an object's origin.";
+    const UNDOABLE: bool = false;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let doc = &cx.state.doc;
+        let mut cursor = match self.position {
+            Some(p) => vec3(p, "position")?,
+            None => doc.view.cursor,
+        };
+        let object = || -> Result<&Object, CommandError> {
+            let reference = self.object.as_deref().ok_or_else(|| {
+                CommandError::invalid("Snapping to a vertex or object needs \"object\".")
+            })?;
+            Ok(doc.objects.get(object(doc, reference)?).expect("resolved"))
+        };
+        match self.snap_to {
+            None => {}
+            Some(SnapTo::Grid) => {
+                let step = doc.settings.grid_step;
+                cursor = (cursor / step).round() * step;
+            }
+            Some(SnapTo::Object) => {
+                let o = object()?;
+                cursor = doc.world_matrix(o).transform_point3(Vec3::ZERO);
+            }
+            Some(SnapTo::Vertex) => {
+                let o = object()?;
+                let world = doc.world_matrix(o);
+                let mesh = doc
+                    .drawn_mesh(o)
+                    .filter(|m| !m.positions.is_empty())
+                    .ok_or_else(|| {
+                        CommandError::new(
+                            ErrorCode::NothingSelected,
+                            format!("'{}' has no vertices to snap to.", o.name),
+                        )
+                    })?;
+                cursor = mesh
+                    .positions
+                    .iter()
+                    .map(|p| world.transform_point3(*p))
+                    .min_by(|a, b| a.distance(cursor).total_cmp(&b.distance(cursor)))
+                    .expect("not empty");
+            }
+        }
+        cx.doc().view.cursor = cursor;
+        Ok(json!({ "cursor": cursor }))
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ViewDisplay {
+    pub wireframe: Option<bool>,
+    pub textured: Option<bool>,
+    pub vertex_color: Option<bool>,
+    pub weights: Option<bool>,
+    pub bones: Option<bool>,
+    pub grid: Option<bool>,
+    pub backface_culling: Option<bool>,
+}
+
+impl Command for ViewDisplay {
+    const NAME: &'static str = "view.display";
+    const DESCRIPTION: &'static str = "Turn viewport display toggles on or off: wireframe, textured, vertex_color, weights, bones, grid, backface_culling. Saved with the project.";
+    const UNDOABLE: bool = false;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let d = &mut cx.doc().view.display;
+        let set = |flag: &mut bool, value: Option<bool>| {
+            if let Some(v) = value {
+                *flag = v;
+            }
+        };
+        set(&mut d.wireframe, self.wireframe);
+        set(&mut d.textured, self.textured);
+        set(&mut d.vertex_color, self.vertex_color);
+        set(&mut d.weights, self.weights);
+        set(&mut d.bones, self.bones);
+        set(&mut d.grid, self.grid);
+        set(&mut d.backface_culling, self.backface_culling);
+        Ok(json!({ "display": *d }))
     }
 }

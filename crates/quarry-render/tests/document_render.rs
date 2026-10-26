@@ -1,10 +1,11 @@
 //! Renders a textured box offscreen. Skips where no GPU adapter exists.
 
 use quarry_core::id::Id;
+use quarry_core::model::DisplayToggles as Display;
 use quarry_core::model::{Filter, Image, ImageRole};
 use quarry_core::{CommandRegistry, Source};
 use quarry_render::camera::{OrbitCamera, Preset};
-use quarry_render::document::{Display, DocumentRenderer};
+use quarry_render::document::DocumentRenderer;
 use quarry_render::snapshot::snapshot;
 use serde_json::json;
 use std::sync::Arc;

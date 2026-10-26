@@ -2,6 +2,7 @@
 //!
 //! Nothing outside `CommandRegistry::execute` mutates the document.
 
+pub mod camera;
 pub mod command;
 pub mod commands;
 pub mod history;

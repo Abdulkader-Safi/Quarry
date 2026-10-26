@@ -306,11 +306,16 @@ impl CommandRegistry {
         };
 
         match request {
+            // Undo and redo move edits, never the camera or crosshair.
             Some(Request::Undo) => {
+                let view = self.state.doc.view;
                 self.history.undo(&mut self.state);
+                self.state.doc.view = view;
             }
             Some(Request::Redo) => {
+                let view = self.state.doc.view;
                 self.history.redo(&mut self.state);
+                self.state.doc.view = view;
             }
             None if undoable && !same_state(&working, &self.state) => {
                 working.revision = self.next_revision;

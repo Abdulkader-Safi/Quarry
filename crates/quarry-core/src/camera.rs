@@ -4,7 +4,10 @@
 use glam::camera::rh::proj::directx as proj;
 use glam::{Mat4, Vec3};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum Preset {
     Front,
     Side,
@@ -13,7 +16,8 @@ pub enum Preset {
     Iso,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct OrbitCamera {
     pub target: Vec3,
     pub distance: f32,

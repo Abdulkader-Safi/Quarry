@@ -41,6 +41,10 @@ pub struct Document {
     pub skeletons: Arena<Skeleton>,
     pub clips: Arena<Clip>,
     pub export_presets: Vec<ExportPreset>,
+    /// Camera, crosshair and display toggles. Saved with the project, never
+    /// part of undo.
+    #[serde(default)]
+    pub view: View,
 }
 
 impl Document {
@@ -55,7 +59,57 @@ impl Document {
             skeletons: Arena::default(),
             clips: Arena::default(),
             export_presets: Vec::new(),
+            view: View::default(),
         }
+    }
+
+    /// World matrix of `object`, following parents (cycles cut at 64 levels).
+    pub fn world_matrix(&self, object: &Object) -> glam::Mat4 {
+        let mut matrix = glam::Mat4::IDENTITY;
+        let mut current = Some(object);
+        for _ in 0..64 {
+            let Some(o) = current else { break };
+            let t = &o.transform;
+            matrix =
+                glam::Mat4::from_scale_rotation_translation(t.scale, t.rotation, t.translation)
+                    * matrix;
+            current = o.parent.and_then(|p| self.objects.get(p));
+        }
+        matrix
+    }
+
+    /// The mesh an object draws: its own, or its source's for an instance.
+    pub fn drawn_mesh<'a>(&'a self, object: &'a Object) -> Option<&'a Mesh> {
+        match object.instance_of {
+            Some(source) => self.objects.get(source).and_then(|s| s.mesh.as_deref()),
+            None => object.mesh.as_deref(),
+        }
+    }
+
+    /// World-space bounds of the given objects' meshes (origins for the rest).
+    pub fn bounds<'a>(
+        &self,
+        objects: impl IntoIterator<Item = &'a Object>,
+    ) -> Option<(Vec3, Vec3)> {
+        let mut bounds: Option<(Vec3, Vec3)> = None;
+        let mut add = |p: Vec3| {
+            bounds = Some(match bounds {
+                None => (p, p),
+                Some((lo, hi)) => (lo.min(p), hi.max(p)),
+            });
+        };
+        for object in objects {
+            let world = self.world_matrix(object);
+            match self.drawn_mesh(object) {
+                Some(mesh) if !mesh.positions.is_empty() => {
+                    mesh.positions
+                        .iter()
+                        .for_each(|p| add(world.transform_point3(*p)));
+                }
+                _ => add(world.transform_point3(Vec3::ZERO)),
+            }
+        }
+        bounds
     }
 
     /// Rough bytes held by `self` that `other` does not share. History uses it
@@ -116,6 +170,42 @@ impl Default for ProjectSettings {
             fps: 30,
             palette_lock: true,
             grid_step: 1.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct View {
+    pub camera: crate::camera::OrbitCamera,
+    /// The 3D crosshair: where tiles, primitives, bones and markers go.
+    pub cursor: Vec3,
+    pub display: DisplayToggles,
+}
+
+/// FR-VIEW-05.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DisplayToggles {
+    pub wireframe: bool,
+    pub textured: bool,
+    pub vertex_color: bool,
+    pub weights: bool,
+    pub bones: bool,
+    pub grid: bool,
+    pub backface_culling: bool,
+}
+
+impl Default for DisplayToggles {
+    fn default() -> Self {
+        Self {
+            wireframe: false,
+            textured: true,
+            vertex_color: false,
+            weights: false,
+            bones: true,
+            grid: true,
+            backface_culling: true,
         }
     }
 }

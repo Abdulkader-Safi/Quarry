@@ -3,7 +3,7 @@
 //! M0 scope: one offscreen colour target, a depth buffer and a benchmark scene of
 //! 100k triangles across 5 skinned meshes with 50 bones. Presentation is the app's job.
 
-pub mod camera;
+pub use quarry_core::camera;
 pub mod document;
 mod gpu;
 pub mod snapshot;
@@ -25,7 +25,7 @@ pub fn thumbnail_png(doc: &quarry_core::Document) -> Option<Vec<u8>> {
     let mut camera = camera::OrbitCamera::preset(camera::Preset::Iso);
     camera.frame(lo, hi);
     renderer
-        .render_png(&snap, &camera, document::Display::default(), 256, 256)
+        .render_png(&snap, &camera, doc.view.display, 256, 256)
         .ok()
 }
 use std::time::Instant;
