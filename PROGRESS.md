@@ -8,7 +8,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 
 | M | Scope | State | Notes |
 |---|-------|-------|-------|
-| M0 | De-risk: workspace, CI, viewport, pen, skim, PSD | in progress | |
+| M0 | De-risk: workspace, CI, viewport, pen, skin, PSD | in progress | |
 | M1 | Core, shell, command server | not started | |
 | M2 | Tiles and linked images | not started | |
 | M3 | Mesh editing, UVs, scene | not started | |
@@ -27,7 +27,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 | Input latency | < 50 ms | | | |
 | Pen pressure | values arrive | | | |
 | PSD composite | matches PNG | | | |
-| 3-bone GLB in Cairn | bends, 0 validator errors | | | |
+| 3-bone GLB in Cairn | bends, 0 validator errors | validator: 0 errors, 0 warnings; Cairn and Blender not yet checked | | |
 
 Note on the fps row: measured on the development machine (MacBook Pro M2 Pro, 16 GB, 100 Hz
 display), not yet on the M1 Air 8 GB the spec targets. Presentation is capped by the display:
