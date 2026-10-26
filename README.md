@@ -56,7 +56,18 @@ cargo run -p quarry -- --headless --dir ~/levels                   # agents may 
 cargo run -p quarry -- --headless --commands jobs.jsonl            # run one JSON command per line, then exit
 ```
 
-A command line looks like `{"id":1,"command":"mesh.add_primitive","args":{"kind":"box"}}`. The `quarry-mcp` server arrives later in M1.
+A command line looks like `{"id":1,"command":"mesh.add_primitive","args":{"kind":"box"}}`.
+
+## Connect Claude
+
+`quarry-mcp` is an MCP server over stdio. Every Quarry command is one of its tools. It talks to the running Quarry, or starts a headless one if none is open.
+
+```bash
+cargo build --release -p quarry -p quarry-mcp
+claude mcp add quarry -- "$PWD/target/release/quarry-mcp"
+```
+
+Agents can write files only inside the open project's folder (or the folder a headless Quarry was started in).
 
 ## Repo tasks
 

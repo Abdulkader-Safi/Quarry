@@ -9,7 +9,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 | M | Scope | State | Notes |
 |---|-------|-------|-------|
 | M0 | De-risk: workspace, CI, viewport, pen, skin, PSD | in progress | |
-| M1 | Core, shell, command server | not started | |
+| M1 | Core, shell, command server | in progress | core, file, autosave, settings, server, MCP done; app shell waits for the Figma design |
 | M2 | Tiles and linked images | not started | |
 | M3 | Mesh editing, UVs, scene | not started | |
 | M4 | Painting | not started | |
