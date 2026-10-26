@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 mod art;
 mod mesh;
+mod scene;
 mod select;
 mod tile;
 
@@ -20,6 +21,7 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     art::register(r);
     select::register(r);
     mesh::register(r);
+    scene::register(r);
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
     r.register::<ProjectRecover>();
@@ -366,23 +368,25 @@ impl Command for QueryScene {
 
     fn run(self, cx: &mut Context) -> CommandResult {
         // ponytail: no paging or 4,000-token cap yet; that is FR-MCP-02 in M8.
+        fn children(doc: &Document, parent: Option<Id<Object>>) -> Vec<&Object> {
+            let mut list: Vec<&Object> =
+                doc.objects.iter().filter(|o| o.parent == parent).collect();
+            list.sort_by_key(|o| (o.order, o.id));
+            list
+        }
         fn node(doc: &Document, o: &Object, depth: Option<u32>) -> serde_json::Value {
-            let children: Vec<_> = match depth {
+            let kids: Vec<_> = match depth {
                 Some(0) => Vec::new(),
-                _ => doc
-                    .objects
-                    .iter()
-                    .filter(|c| c.parent == Some(o.id))
+                _ => children(doc, Some(o.id))
+                    .into_iter()
                     .map(|c| node(doc, c, depth.map(|d| d - 1)))
                     .collect(),
             };
-            json!({ "id": o.id, "name": o.name, "kind": o.kind, "children": children })
+            json!({ "id": o.id, "name": o.name, "kind": o.kind, "children": kids })
         }
         let doc = &cx.state.doc;
-        let roots: Vec<_> = doc
-            .objects
-            .iter()
-            .filter(|o| o.parent.is_none())
+        let roots: Vec<_> = children(doc, None)
+            .into_iter()
             .map(|o| node(doc, o, self.depth))
             .collect();
         Ok(json!({ "objects": roots }))

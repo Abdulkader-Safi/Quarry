@@ -334,6 +334,9 @@ pub struct Object {
     pub name: String,
     pub kind: ObjectKind,
     pub parent: Option<Id<Object>>,
+    /// Position among its siblings in the scene tree, lowest first.
+    #[serde(default)]
+    pub order: i32,
     pub transform: Transform,
     pub visible: bool,
     pub locked: bool,
@@ -354,6 +357,7 @@ impl Object {
             name: name.into(),
             kind,
             parent: None,
+            order: 0,
             transform: Transform::default(),
             visible: true,
             locked: false,
