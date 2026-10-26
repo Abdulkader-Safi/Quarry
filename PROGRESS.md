@@ -58,3 +58,11 @@ Both rows still need a run on the M1 Air 8 GB.
 - 2026-10-26: PSD with no composite (saved without Maximize Compatibility) shows "This PSD has no
   flattened image. Re-save it with Maximize Compatibility turned on." Detected as a layered file
   whose composite is one flat colour.
+- 2026-10-26: **M1 core crates started while M0 hand checks are pending.** The open M0 items (Cairn and
+  Blender loads, PSD files, pen, M1 Air numbers, Windows/Linux runs) only affect the app crate, and
+  principle 5 keeps everything below it GPUI-free. The app shell waits for the Figma design.
+- 2026-10-26: Added `project.recover(autosave)` to the command list. FR-PROJ-04 needs a way to load an
+  autosave while keeping the project's own file path, and every change goes through a command.
+- 2026-10-26: Tilesets and textures share one `images` arena with a `role` field (spec lists two
+  lists). Same data, one lookup by name or ID.
+

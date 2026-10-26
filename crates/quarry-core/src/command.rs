@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -80,6 +80,8 @@ pub trait Command: DeserializeOwned + JsonSchema + 'static {
 pub trait Storage {
     fn open(&self, path: &Path) -> Result<Document, CommandError>;
     fn save(&self, doc: &Document, path: &Path) -> Result<(), CommandError>;
+    /// Load an autosave and the project file it belongs to (None if never saved).
+    fn recover(&self, autosave: &Path) -> Result<(Document, Option<PathBuf>), CommandError>;
 }
 
 /// What a command can see and change. Edits go to `state`, a working copy.

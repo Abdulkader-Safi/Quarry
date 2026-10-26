@@ -9,10 +9,12 @@
 //! Saves are atomic (temp file + rename). Reads cap entry count, entry size and
 //! total size, reject paths that escape the archive, and never panic.
 
+use crate::autosave;
+use crate::settings::Dirs;
 use quarry_core::command::{CommandError, Storage};
 use quarry_core::model::{Axis, Corner, Document, FORMAT_VERSION, Face, Influences, Mesh};
 use std::io::{Cursor, Read, Seek, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -24,15 +26,39 @@ const MAX_IMAGE_SIDE: u32 = 16_384;
 const MESH_MAGIC: &[u8; 4] = b"QMSH";
 const MESH_VERSION: u32 = 1;
 
-/// `project.open` / `project.save` storage for the command registry.
-pub struct QuarryFiles;
+/// `project.open` / `project.save` storage for the command registry. With
+/// `dirs` set, saves keep backups and clear the autosave they replace.
+#[derive(Default)]
+pub struct QuarryFiles {
+    pub dirs: Option<Dirs>,
+}
 
 impl Storage for QuarryFiles {
     fn open(&self, path: &Path) -> Result<Document, CommandError> {
         read_project(path)
     }
+
     fn save(&self, doc: &Document, path: &Path) -> Result<(), CommandError> {
-        write_project(doc, path)
+        if let Some(dirs) = &self.dirs
+            && let Err(why) = autosave::backup_before_save(dirs, path)
+        {
+            // A missing backup must not cost the user their save.
+            tracing::warn!("{why}");
+        }
+        write_project(doc, path)?;
+        if let Some(dirs) = &self.dirs {
+            autosave::clear_autosave(dirs, Some(path));
+            autosave::clear_autosave(dirs, None);
+        }
+        Ok(())
+    }
+
+    fn recover(&self, autosave: &Path) -> Result<(Document, Option<PathBuf>), CommandError> {
+        let doc = read_project(autosave)?;
+        let sidecar: Option<autosave::Sidecar> = std::fs::read(autosave.with_extension("json"))
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok());
+        Ok((doc, sidecar.and_then(|s| s.project)))
     }
 }
 

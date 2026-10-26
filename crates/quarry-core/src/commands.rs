@@ -13,6 +13,7 @@ use std::sync::Arc;
 pub(crate) fn register_all(r: &mut CommandRegistry) {
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
+    r.register::<ProjectRecover>();
     r.register::<ProjectSave>();
     r.register::<ProjectSaveAs>();
     r.register::<ProjectInfo>();
@@ -145,6 +146,29 @@ impl Command for ProjectOpen {
         cx.state.doc = doc;
         cx.state.path = Some(self.path);
         cx.mark_saved();
+        Ok(reply)
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectRecover {
+    /// The autosave file offered on launch.
+    pub autosave: PathBuf,
+}
+
+impl Command for ProjectRecover {
+    const NAME: &'static str = "project.recover";
+    const DESCRIPTION: &'static str = "Restore work from an autosave after a crash. The project keeps its own file path and is left unsaved, so the next save writes the recovered work there.";
+    const LONG: bool = true;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        cx.step(0.0)?;
+        let (doc, path) = cx.storage()?.recover(&self.autosave)?;
+        cx.step(1.0)?;
+        let reply = json!({ "name": doc.name, "path": path, "objects": doc.objects.len() });
+        cx.state.doc = doc;
+        cx.state.path = path;
         Ok(reply)
     }
 }

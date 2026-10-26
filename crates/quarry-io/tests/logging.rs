@@ -9,8 +9,20 @@ fn log_lines_reach_the_file_and_the_console() {
     tracing::info!(command = "project.save", "saved");
     drop(guard); // flush the file writer
 
-    assert!(console.lines().iter().any(|l| l.contains("saved") && l.contains("project.save")));
-    let files: Vec<_> = std::fs::read_dir(dirs.logs()).unwrap().map(|e| e.unwrap().path()).collect();
+    assert!(
+        console
+            .lines()
+            .iter()
+            .any(|l| l.contains("saved") && l.contains("project.save"))
+    );
+    let files: Vec<_> = std::fs::read_dir(dirs.logs())
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
     assert_eq!(files.len(), 1);
-    assert!(std::fs::read_to_string(&files[0]).unwrap().contains("saved"));
+    assert!(
+        std::fs::read_to_string(&files[0])
+            .unwrap()
+            .contains("saved")
+    );
 }

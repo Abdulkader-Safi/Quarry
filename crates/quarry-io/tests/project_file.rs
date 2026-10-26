@@ -222,7 +222,7 @@ fn damaged_and_hostile_files_are_errors() {
 fn registry_saves_opens_and_tracks_dirty() {
     let dir = temp_dir("registry");
     let mut r = CommandRegistry::new();
-    r.set_storage(Box::new(QuarryFiles));
+    r.set_storage(Box::new(QuarryFiles::default()));
     r.execute(
         "mesh.add_primitive",
         json!({ "kind": "box" }),
