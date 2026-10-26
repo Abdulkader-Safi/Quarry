@@ -3,7 +3,6 @@
 
 use interprocess::local_socket::{GenericFilePath, GenericNamespaced, Name, prelude::*};
 use std::io;
-use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SocketAddr(pub String);
@@ -45,6 +44,7 @@ fn default_addr() -> io::Result<SocketAddr> {
 #[cfg(unix)]
 fn default_addr() -> io::Result<SocketAddr> {
     use std::os::unix::fs::DirBuilderExt;
+    use std::path::PathBuf;
     // XDG_RUNTIME_DIR (Linux) and TMPDIR (macOS) are normally private to the user.
     let private = ["XDG_RUNTIME_DIR", "TMPDIR"]
         .iter()
