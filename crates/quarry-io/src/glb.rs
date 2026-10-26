@@ -73,20 +73,7 @@ impl GlbWriter {
             (None, None)
         };
 
-        while !self.bin.len().is_multiple_of(4) {
-            self.bin.push(0);
-        }
-        let view = self.root.push(View {
-            buffer: Index::new(0),
-            byte_length: bytes.len().into(),
-            byte_offset: Some(self.bin.len().into()),
-            byte_stride: None,
-            name: None,
-            target: target.map(Valid),
-            extensions: None,
-            extras: Default::default(),
-        });
-        self.bin.extend_from_slice(bytes);
+        let view = self.view(bytes, target);
 
         self.root.push(Accessor {
             buffer_view: Some(view),
@@ -104,28 +91,51 @@ impl GlbWriter {
         })
     }
 
-    /// The finished `.glb` bytes.
-    pub fn finish(mut self) -> Result<Vec<u8>, serde_json::Error> {
+    /// Store raw bytes (such as a PNG) in their own buffer view.
+    pub fn view(&mut self, bytes: &[u8], target: Option<Target>) -> Index<View> {
+        while !self.bin.len().is_multiple_of(4) {
+            self.bin.push(0);
+        }
+        let view = self.root.push(View {
+            buffer: Index::new(0),
+            byte_length: bytes.len().into(),
+            byte_offset: Some(self.bin.len().into()),
+            byte_stride: None,
+            name: None,
+            target: target.map(Valid),
+            extensions: None,
+            extras: Default::default(),
+        });
+        self.bin.extend_from_slice(bytes);
+        view
+    }
+
+    /// The document and its binary buffer, for a separate `.gltf` + `.bin`.
+    pub fn into_parts(mut self) -> (Root, Vec<u8>) {
         while !self.bin.len().is_multiple_of(4) {
             self.bin.push(0);
         }
         self.root.buffers[0].byte_length = self.bin.len().into();
+        (self.root, self.bin)
+    }
 
-        let mut json = self.root.to_vec()?;
+    /// The finished `.glb` bytes.
+    pub fn finish(self) -> Result<Vec<u8>, serde_json::Error> {
+        let (root, bin) = self.into_parts();
+        let mut json = root.to_vec()?;
         while !json.len().is_multiple_of(4) {
             json.push(b' ');
         }
-
-        let total = 12 + 8 + json.len() + 8 + self.bin.len();
+        let total = 12 + 8 + json.len() + 8 + bin.len();
         let mut out = Vec::with_capacity(total);
         for word in [MAGIC, 2, total as u32, json.len() as u32, CHUNK_JSON] {
             out.extend_from_slice(&word.to_le_bytes());
         }
         out.extend_from_slice(&json);
-        for word in [self.bin.len() as u32, CHUNK_BIN] {
+        for word in [bin.len() as u32, CHUNK_BIN] {
             out.extend_from_slice(&word.to_le_bytes());
         }
-        out.extend_from_slice(&self.bin);
+        out.extend_from_slice(&bin);
         Ok(out)
     }
 }

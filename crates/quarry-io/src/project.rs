@@ -65,6 +65,14 @@ impl Storage for QuarryFiles {
         crate::images::load_image(path)
     }
 
+    fn export(
+        &self,
+        doc: &Document,
+        request: &quarry_core::command::ExportRequest,
+    ) -> Result<serde_json::Value, CommandError> {
+        crate::export::export(doc, request)
+    }
+
     fn recover(&self, autosave: &Path) -> Result<(Document, Option<PathBuf>), CommandError> {
         let doc = read_project(autosave)?;
         let sidecar: Option<autosave::Sidecar> = std::fs::read(autosave.with_extension("json"))

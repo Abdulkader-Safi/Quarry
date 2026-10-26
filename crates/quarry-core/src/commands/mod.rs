@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 mod art;
+mod export;
 mod mesh;
 mod scene;
 mod select;
@@ -24,6 +25,7 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     mesh::register(r);
     scene::register(r);
     uv::register(r);
+    export::register(r);
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
     r.register::<ProjectRecover>();

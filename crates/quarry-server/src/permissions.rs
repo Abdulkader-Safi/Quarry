@@ -8,7 +8,11 @@ use serde_json::Value;
 use std::path::{Component, Path, PathBuf};
 
 /// Commands that write files, and the argument naming where.
-const WRITES: &[(&str, &str)] = &[("project.new", "path"), ("project.save_as", "path")];
+const WRITES: &[(&str, &str)] = &[
+    ("project.new", "path"),
+    ("project.save_as", "path"),
+    ("export.run", "path"),
+];
 
 /// Refuse an agent request that would write outside `roots`.
 pub fn check_agent(command: &str, args: &Value, roots: &[PathBuf]) -> Result<(), CommandError> {

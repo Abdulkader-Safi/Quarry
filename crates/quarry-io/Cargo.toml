@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 quarry-core = { path = "../quarry-core" }
 zip.workspace = true
+gltf.workspace = true
+glam.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
 directories.workspace = true
@@ -17,14 +19,9 @@ serde.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
-gltf-json = { workspace = true, features = ["names"] }
+gltf-json = { workspace = true, features = ["names", "extras"] }
 bytemuck.workspace = true
 psd.workspace = true
 image.workspace = true
 serde_json.workspace = true
 
-[dev-dependencies]
-gltf.workspace = true
-glam.workspace = true
-zip.workspace = true
-quarry-core = { path = "../quarry-core" }

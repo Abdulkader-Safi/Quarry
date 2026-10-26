@@ -84,6 +84,17 @@ pub trait Storage: Send + Sync {
     fn recover(&self, autosave: &Path) -> Result<(Document, Option<PathBuf>), CommandError>;
     /// Read a PNG or PSD (flattened) as sRGB RGBA8.
     fn read_image(&self, path: &Path) -> Result<LoadedImage, CommandError>;
+    /// Write a glTF export and check it; returns the files and a report.
+    fn export(&self, doc: &Document, request: &ExportRequest) -> Result<Value, CommandError>;
+}
+
+/// What `export.run` asks storage to write.
+pub struct ExportRequest {
+    pub path: PathBuf,
+    pub format: crate::model::ExportFormat,
+    /// The objects to export, with their children.
+    pub objects: Vec<crate::id::Id<crate::model::Object>>,
+    pub scale: f32,
 }
 
 pub struct LoadedImage {
