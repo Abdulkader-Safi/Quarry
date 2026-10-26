@@ -77,7 +77,7 @@ pub trait Command: DeserializeOwned + JsonSchema + 'static {
 }
 
 /// Reads and writes `.quarry` files. Lives in `quarry-io`, installed at startup.
-pub trait Storage {
+pub trait Storage: Send + Sync {
     fn open(&self, path: &Path) -> Result<Document, CommandError>;
     fn save(&self, doc: &Document, path: &Path) -> Result<(), CommandError>;
     /// Load an autosave and the project file it belongs to (None if never saved).
@@ -261,7 +261,25 @@ impl CommandRegistry {
         })?;
         let (run, undoable) = (entry.run, entry.undoable);
         self.cancel.store(false, Ordering::Relaxed);
+        let started = std::time::Instant::now();
+        let result = self.run_entry(name, run, undoable, args, source, progress);
+        let ms = started.elapsed().as_millis() as u64;
+        match &result {
+            Ok(_) => tracing::info!(command = name, ?source, ms, "ok"),
+            Err(e) => tracing::info!(command = name, ?source, ms, code = ?e.code, "error"),
+        }
+        result
+    }
 
+    fn run_entry(
+        &mut self,
+        name: &str,
+        run: Runner,
+        undoable: bool,
+        args: Value,
+        source: Source,
+        progress: &mut dyn FnMut(f32),
+    ) -> CommandResult {
         let mut working = self.state.clone();
         let mut cx = Context {
             state: &mut working,

@@ -1,3 +1,9 @@
 //! Local socket server, headless runner and agent permission checks.
 
-// Nothing here yet: M0 only proves the workspace builds. Real code lands per milestone.
+pub mod headless;
+pub mod permissions;
+pub mod server;
+pub mod socket;
+
+pub use server::{Client, Incoming, Server};
+pub use socket::SocketAddr;

@@ -8,3 +8,12 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+quarry-core = { path = "../quarry-core" }
+quarry-io = { path = "../quarry-io" }
+interprocess.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+schemars.workspace = true

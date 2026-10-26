@@ -55,6 +55,12 @@ impl<'a> fmt::MakeWriter<'a> for Console {
 
 /// Start logging. Keep the guard alive for the whole run so the file is flushed.
 pub fn init(dirs: &Dirs) -> Result<(Console, WorkerGuard), String> {
+    std::fs::create_dir_all(dirs.logs()).map_err(|e| {
+        format!(
+            "Could not make the log folder {}: {e}.",
+            dirs.logs().display()
+        )
+    })?;
     let file = Builder::new()
         .rotation(Rotation::DAILY)
         .max_log_files(7)

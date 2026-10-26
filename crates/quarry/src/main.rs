@@ -121,6 +121,16 @@ fn main() {
     };
     let has = |name: &str| args.iter().any(|a| a == name);
 
+    if has("--headless") {
+        std::process::exit(match headless(&args) {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("{e}");
+                1
+            }
+        });
+    }
+
     if has("--bench") || has("--check") || has("--present-check") {
         let frames = number("--frames").unwrap_or(300.0) as u32;
         if has("--check") {
@@ -192,6 +202,13 @@ fn main() {
             eprintln!("failed to open the spike window: {e}");
         }
     });
+}
+
+/// `quarry --headless [--socket <path>] [--dir <folder>] [--commands <file.jsonl>]`
+fn headless(args: &[String]) -> Result<(), String> {
+    let options = quarry_server::headless::Options::from_args(args)?;
+    let _log = quarry_io::logging::init(&options.dirs)?;
+    quarry_server::headless::run(options)
 }
 
 fn distinct_colors(pixels: &[u8]) -> usize {

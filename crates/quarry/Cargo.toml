@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 gpui-kit.workspace = true
 quarry-render = { path = "../quarry-render" }
+quarry-io = { path = "../quarry-io" }
+quarry-server = { path = "../quarry-server" }
 wgpu.workspace = true
 glam.workspace = true
 tracing.workspace = true

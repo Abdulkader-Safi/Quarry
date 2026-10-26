@@ -48,7 +48,15 @@ cargo run -p quarry --release -- --present-check    # compare the NV12 present p
 
 Click in the window to print `click_to_frame_ms` for that click. Draw with a tablet pen, or press hard on a Force Touch trackpad, to see the pressure value change.
 
-`cargo run -p quarry -- --headless` and the `quarry-mcp` server arrive in M1.
+Headless mode runs the same document and commands with no window:
+
+```bash
+cargo run -p quarry -- --headless                                  # serve the local socket
+cargo run -p quarry -- --headless --dir ~/levels                   # agents may also write in ~/levels
+cargo run -p quarry -- --headless --commands jobs.jsonl            # run one JSON command per line, then exit
+```
+
+A command line looks like `{"id":1,"command":"mesh.add_primitive","args":{"kind":"box"}}`. The `quarry-mcp` server arrives later in M1.
 
 ## Repo tasks
 

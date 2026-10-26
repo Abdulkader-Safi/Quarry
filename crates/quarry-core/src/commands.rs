@@ -108,20 +108,22 @@ impl SettingsPatch {
 pub struct ProjectNew {
     /// Project name. Default "Untitled".
     pub name: Option<String>,
+    /// Where project.save will write the .quarry file. Nothing is written yet.
+    pub path: Option<PathBuf>,
     /// Starting settings; pixel-art defaults otherwise.
     pub settings: Option<SettingsPatch>,
 }
 
 impl Command for ProjectNew {
     const NAME: &'static str = "project.new";
-    const DESCRIPTION: &'static str = "Start a new empty project with pixel-art defaults (16 px tiles, nearest filtering, 1 tile = 1 m, 30 fps). Undo returns to the previous project.";
+    const DESCRIPTION: &'static str = "Start a new empty project with pixel-art defaults (16 px tiles, nearest filtering, 1 tile = 1 m, 30 fps). Give a path so project.save knows where to write. Undo returns to the previous project.";
 
     fn run(self, cx: &mut Context) -> CommandResult {
         let mut doc = Document::new(self.name.unwrap_or_else(|| "Untitled".into()));
         self.settings.unwrap_or_default().apply(&mut doc.settings)?;
         let reply = json!({ "name": doc.name, "settings": doc.settings });
         cx.state.doc = doc;
-        cx.state.path = None;
+        cx.state.path = self.path.map(with_quarry_extension);
         Ok(reply)
     }
 }
@@ -209,12 +211,15 @@ impl Command for ProjectSaveAs {
     const UNDOABLE: bool = false;
 
     fn run(self, cx: &mut Context) -> CommandResult {
-        let mut path = self.path;
-        if path.extension().is_none_or(|e| e != "quarry") {
-            path.as_mut_os_string().push(".quarry");
-        }
-        save_to(cx, path)
+        save_to(cx, with_quarry_extension(self.path))
     }
+}
+
+fn with_quarry_extension(mut path: PathBuf) -> PathBuf {
+    if path.extension().is_none_or(|e| e != "quarry") {
+        path.as_mut_os_string().push(".quarry");
+    }
+    path
 }
 
 fn save_to(cx: &mut Context, path: PathBuf) -> CommandResult {
