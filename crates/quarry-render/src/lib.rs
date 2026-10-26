@@ -398,6 +398,14 @@ impl Renderer {
         &self.target
     }
 
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
     pub fn target_view(&self) -> &wgpu::TextureView {
         &self.target_view
     }

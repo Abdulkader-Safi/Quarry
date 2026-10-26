@@ -3095,6 +3095,7 @@ dependencies = [
  "qoi",
  "ravif",
  "rayon",
+ "rgb",
  "tiff",
  "zune-core 0.5.3",
  "zune-jpeg 0.5.15",
@@ -4866,6 +4867,7 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "gpui-kit",
+ "image",
  "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-core-video",

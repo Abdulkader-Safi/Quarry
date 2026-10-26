@@ -1,6 +1,7 @@
 //! macOS presentation: render into an IOSurface-backed NV12 CVPixelBuffer and hand it
 //! to GPUI's surface element. GPUI's renderer only accepts 420 bi-planar buffers.
 
+use gpui_kit::{IntoElement as _, Styled as _};
 use objc2::runtime::ProtocolObject;
 use objc2_core_foundation::{CFDictionary, CFRetained, CFType};
 use objc2_core_video::{
@@ -25,13 +26,10 @@ pub struct Presenter {
 }
 
 impl Presenter {
-    pub fn new(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        source: &wgpu::TextureView,
-        width: u32,
-        height: u32,
-    ) -> Result<Self, String> {
+    pub fn new(renderer: &quarry_render::Renderer) -> Result<Self, String> {
+        let device = renderer.device();
+        let width = renderer.width();
+        let height = renderer.height();
         let mtl_device = unsafe { device.as_hal::<wgpu::hal::api::Metal>() }
             .ok_or("device is not Metal")?
             .raw_device()
@@ -99,7 +97,7 @@ impl Presenter {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(source),
+                    resource: wgpu::BindingResource::TextureView(renderer.target_view()),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -129,7 +127,7 @@ impl Presenter {
 
         Ok(Self {
             device: device.clone(),
-            queue: queue.clone(),
+            queue: renderer.queue().clone(),
             pixel_buffer,
             y_view: y_texture.create_view(&wgpu::TextureViewDescriptor::default()),
             chroma_view: chroma_texture.create_view(&wgpu::TextureViewDescriptor::default()),
@@ -140,7 +138,7 @@ impl Presenter {
     }
 
     /// Convert the scene target into the NV12 buffer, ready for `paint_surface`.
-    pub fn present(&self) {
+    pub fn present(&mut self) {
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -173,8 +171,10 @@ impl Presenter {
         self.queue.submit([encoder.finish()]);
     }
 
-    pub fn buffer(&self) -> CFRetained<CVPixelBuffer> {
-        self.pixel_buffer.clone()
+    pub fn element(&self) -> gpui_kit::AnyElement {
+        gpui_kit::surface(self.pixel_buffer.clone())
+            .size_full()
+            .into_any_element()
     }
 
     /// Read the NV12 buffer back as RGB. Used by `--present-check` to prove the

@@ -1,6 +1,9 @@
 //! M0 viewport spike: a GPUI window showing a wgpu-rendered scene.
 
+#[cfg(target_os = "macos")]
 mod present;
+#[cfg(not(target_os = "macos"))]
+mod readback;
 
 use gpui_kit::*;
 use std::time::{Duration, Instant};
@@ -8,9 +11,14 @@ use std::time::{Duration, Instant};
 const WIDTH: u32 = 1600;
 const HEIGHT: u32 = 1000;
 
+#[cfg(target_os = "macos")]
+type Presenter = present::Presenter;
+#[cfg(not(target_os = "macos"))]
+type Presenter = readback::Presenter;
+
 struct Spike {
     renderer: quarry_render::Renderer,
-    presenter: present::Presenter,
+    presenter: Presenter,
     started: Instant,
     report_at: Instant,
     frames: u32,
@@ -20,8 +28,13 @@ struct Spike {
 impl Render for Spike {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let elapsed = self.started.elapsed();
-        self.renderer.render(elapsed.as_secs_f32());
-        self.presenter.present();
+        #[cfg(target_os = "macos")]
+        {
+            self.renderer.render(elapsed.as_secs_f32());
+            self.presenter.present();
+        }
+        #[cfg(not(target_os = "macos"))]
+        self.presenter.render(&self.renderer, elapsed.as_secs_f32());
 
         self.frames += 1;
         let since_report = self.report_at.elapsed();
@@ -35,9 +48,7 @@ impl Render for Spike {
         }
 
         window.request_animation_frame();
-        div()
-            .size_full()
-            .child(gpui_kit::surface(self.presenter.buffer()).size_full())
+        div().size_full().child(self.presenter.element())
     }
 }
 
@@ -69,7 +80,10 @@ fn main() {
             return;
         }
         if has("--present-check") {
+            #[cfg(target_os = "macos")]
             present_check();
+            #[cfg(not(target_os = "macos"))]
+            println!("present-check is macOS only; this platform uses the readback path");
             return;
         }
         match quarry_render::bench(WIDTH, HEIGHT, frames) {
@@ -98,14 +112,7 @@ fn main() {
                 cx.new(move |_| {
                     let renderer =
                         quarry_render::Renderer::new(WIDTH, HEIGHT).expect("renderer start");
-                    let presenter = present::Presenter::new(
-                        renderer.device(),
-                        renderer.queue(),
-                        renderer.target_view(),
-                        WIDTH,
-                        HEIGHT,
-                    )
-                    .expect("presenter start");
+                    let presenter = Presenter::new(&renderer).expect("presenter start");
                     Spike {
                         renderer,
                         presenter,
@@ -133,16 +140,10 @@ fn distinct_colors(pixels: &[u8]) -> usize {
 
 /// Render one frame, convert it to NV12, read the buffer back and compare the
 /// converted colours with the scene target.
+#[cfg(target_os = "macos")]
 fn present_check() {
     let renderer = quarry_render::Renderer::new(WIDTH, HEIGHT).expect("renderer start");
-    let presenter = present::Presenter::new(
-        renderer.device(),
-        renderer.queue(),
-        renderer.target_view(),
-        WIDTH,
-        HEIGHT,
-    )
-    .expect("presenter start");
+    let mut presenter = Presenter::new(&renderer).expect("presenter start");
 
     renderer.render(0.5);
     presenter.present();
