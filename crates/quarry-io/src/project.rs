@@ -12,7 +12,7 @@
 use quarry_core::command::{CommandError, Storage};
 use quarry_core::model::{Axis, Corner, Document, FORMAT_VERSION, Face, Influences, Mesh};
 use std::io::{Cursor, Read, Seek, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -45,18 +45,7 @@ pub fn write_project(doc: &Document, path: &Path) -> Result<(), CommandError> {
         ))
     };
     let bytes = encode(doc).map_err(failed)?;
-    let temp = temp_path(path);
-    let result = (|| {
-        let mut file = std::fs::File::create(&temp)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-        std::fs::rename(&temp, path)
-    })();
-    if let Err(e) = result {
-        let _ = std::fs::remove_file(&temp);
-        return Err(failed(e.to_string()));
-    }
-    Ok(())
+    crate::settings::write_atomic(path, &bytes).map_err(|e| failed(e.to_string()))
 }
 
 /// Read a `.quarry` file. Damaged or hostile files return an error naming the file.
@@ -69,12 +58,6 @@ pub fn read_project(path: &Path) -> Result<Document, CommandError> {
             path.display()
         ))
     })
-}
-
-fn temp_path(path: &Path) -> PathBuf {
-    let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(format!(".{}.tmp", std::process::id()));
-    path.with_file_name(name)
 }
 
 pub fn encode(doc: &Document) -> Result<Vec<u8>, String> {
