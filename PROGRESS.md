@@ -11,7 +11,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 | M0 | De-risk: workspace, CI, viewport, pen, skin, PSD | in progress | |
 | M1 | Core, shell, command server | in progress | core, file, autosave, settings, server, MCP done; app shell waits for the Figma design |
 | M2 | Tiles and linked images | in progress | commands, linked art and live refresh (~135 ms) done headless; UI waits for the design |
-| M3 | Mesh editing, UVs, scene | not started | |
+| M3 | Mesh editing, UVs, scene | in progress | primitives, selection, transform, extrude, cleanup, mirror done headless |
 | M4 | Painting | not started | |
 | M5 | glTF export and import | not started | |
 | M6 | Rigging | not started | |
@@ -73,4 +73,6 @@ Both rows still need a run on the M1 Air 8 GB.
   toggle that is saved, and every user-facing action is a command.
 - 2026-10-26: Tile cells are 1 m with cell (0, 0) at the crosshair; tiles go into a mesh object named
   "Tiles" unless another is named. Tileset padding is both the margin and the gap between tiles.
+- 2026-10-26: FR-MESH-04's check says a box top extrude gives "5 more faces". A region extrude (Blender's
+  behaviour) moves the top and adds 4 side quads, 10 faces in all; that is what is built and tested.
 

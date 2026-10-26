@@ -346,7 +346,7 @@ fn put(mesh: &mut Mesh, corners: [Vec3; 4], uvs: [Vec2; 4], image: Id<Image>, ti
 }
 
 /// Drop vertices no face uses any more, keeping indices consistent.
-fn compact(mesh: &mut Mesh) {
+pub(super) fn compact(mesh: &mut Mesh) {
     let mut used = vec![false; mesh.positions.len()];
     for c in mesh.faces.iter().flat_map(|f| &f.corners) {
         used[c.vertex as usize] = true;
