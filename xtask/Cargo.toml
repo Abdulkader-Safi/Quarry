@@ -8,3 +8,5 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+quarry-io = { path = "../crates/quarry-io" }
+image.workspace = true

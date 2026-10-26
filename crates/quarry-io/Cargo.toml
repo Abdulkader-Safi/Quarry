@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 gltf-json = { workspace = true, features = ["names"] }
 bytemuck.workspace = true
+psd.workspace = true
+image.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

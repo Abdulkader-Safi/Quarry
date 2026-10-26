@@ -4875,6 +4875,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "psd"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a25f9b8cfffd65d911baf31a033239f7a0facb755faa2481575b70db5dc9195"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "pulp"
 version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4942,6 +4951,8 @@ dependencies = [
  "glam",
  "gltf",
  "gltf-json",
+ "image",
+ "psd",
  "serde_json",
 ]
 
@@ -8337,6 +8348,10 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 [[package]]
 name = "xtask"
 version = "0.1.0"
+dependencies = [
+ "image",
+ "quarry-io",
+]
 
 [[package]]
 name = "y4m"

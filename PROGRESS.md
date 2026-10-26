@@ -26,7 +26,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 | Viewport fps, 100k tri / 50 bones / 5 skinned @1600x1000 | 60 / ≥30 | 100 fps, M2 Pro 16 GB (see note) | | |
 | Input latency | < 50 ms | | | |
 | Pen pressure | values arrive | | | |
-| PSD composite | matches PNG | | | |
+| PSD composite | matches PNG | reader + `xtask psd-check` ready; Affinity and Photoshop files not yet checked | | |
 | 3-bone GLB in Cairn | bends, 0 validator errors | validator: 0 errors, 0 warnings; Cairn and Blender not yet checked | | |
 
 Note on the fps row: measured on the development machine (MacBook Pro M2 Pro, 16 GB, 100 Hz
@@ -49,3 +49,6 @@ still unmeasured — that is the rest of this card.
   pass pair (~0.07 ms). Checked with `--present-check`: mean channel error 1.35/255 against the
   scene target, worst 91/255 at colour edges (2x2 chroma subsampling, expected). GLES/Vulkan paths
   on Windows and Linux are unaffected — those windows go through a normal swapchain, no NV12.
+- 2026-10-26: PSD with no composite (saved without Maximize Compatibility) shows "This PSD has no
+  flattened image. Re-save it with Maximize Compatibility turned on." Detected as a layered file
+  whose composite is one flat colour.

@@ -1,6 +1,6 @@
 //! Repo tasks. Usage: cargo run -p xtask -- <task>
 //!
-//! Tasks: validate-gltf, bench (M9), goldens (M5).
+//! Tasks: validate-gltf, psd-check <file.psd> <flattened.png>, bench (M9), goldens (M5).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
@@ -9,7 +9,15 @@ fn main() {
     let task = std::env::args().nth(1).unwrap_or_default();
     match task.as_str() {
         "validate-gltf" => validate_gltf(),
-        "" => eprintln!("usage: cargo run -p xtask -- <validate-gltf|bench|goldens>"),
+        "psd-check" => {
+            let args: Vec<String> = std::env::args().skip(2).collect();
+            let [psd, png] = args.as_slice() else {
+                eprintln!("usage: cargo run -p xtask -- psd-check <file.psd> <flattened.png>");
+                exit(1);
+            };
+            psd_check(Path::new(psd), Path::new(png));
+        }
+        "" => eprintln!("usage: cargo run -p xtask -- <validate-gltf|psd-check|bench|goldens>"),
         other => {
             eprintln!("xtask: '{other}' lands in a later milestone");
             exit(1);
@@ -45,5 +53,53 @@ fn run(command: &mut Command) {
     });
     if !status.success() {
         exit(status.code().unwrap_or(1));
+    }
+}
+
+/// M0 PSD spike: compare a PSD's composite with the editor's flattened PNG export.
+fn psd_check(psd: &Path, png: &Path) {
+    let bytes = std::fs::read(psd).unwrap_or_else(|e| {
+        eprintln!("could not read {}: {e}", psd.display());
+        exit(1);
+    });
+    let composite = quarry_io::psd::read_psd(&bytes).unwrap_or_else(|e| {
+        eprintln!("{}: {e}", psd.display());
+        exit(1);
+    });
+    let flat = image::open(png)
+        .unwrap_or_else(|e| {
+            eprintln!("could not read {}: {e}", png.display());
+            exit(1);
+        })
+        .to_rgba8();
+    if composite.dimensions() != flat.dimensions() {
+        eprintln!(
+            "size differs: PSD {:?}, PNG {:?}",
+            composite.dimensions(),
+            flat.dimensions()
+        );
+        exit(1);
+    }
+    let pixels = composite.pixels().zip(flat.pixels());
+    let (mut differ, mut worst) = (0usize, 0u8);
+    for (a, b) in pixels {
+        let channel =
+            a.0.iter()
+                .zip(b.0)
+                .map(|(x, y)| x.abs_diff(y))
+                .max()
+                .unwrap();
+        if channel > 0 {
+            differ += 1;
+            worst = worst.max(channel);
+        }
+    }
+    let total = composite.width() as usize * composite.height() as usize;
+    println!(
+        "{}: {differ} of {total} pixels differ, worst channel error {worst}/255",
+        psd.display()
+    );
+    if differ > 0 {
+        exit(1);
     }
 }
