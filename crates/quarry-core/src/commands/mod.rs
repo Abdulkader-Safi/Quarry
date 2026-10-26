@@ -11,11 +11,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 mod art;
+mod select;
 mod tile;
 
 pub(crate) fn register_all(r: &mut CommandRegistry) {
     tile::register(r);
     art::register(r);
+    select::register(r);
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
     r.register::<ProjectRecover>();

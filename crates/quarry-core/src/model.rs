@@ -45,6 +45,10 @@ pub struct Document {
     /// part of undo.
     #[serde(default)]
     pub view: View,
+    /// What the next mesh command acts on. Not saved; undo restores it with
+    /// the mesh it belongs to.
+    #[serde(skip)]
+    pub selection: Selection,
 }
 
 impl Document {
@@ -60,6 +64,7 @@ impl Document {
             clips: Arena::default(),
             export_presets: Vec::new(),
             view: View::default(),
+            selection: Selection::default(),
         }
     }
 
@@ -219,6 +224,74 @@ pub struct Brush {
     pub mirror: bool,
     /// Top-bottom.
     pub flip: bool,
+}
+
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectMode {
+    #[default]
+    Object,
+    Vertex,
+    Edge,
+    Face,
+}
+
+/// Selected objects, or elements of one mesh object being edited (FR-MESH-02).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Selection {
+    pub mode: SelectMode,
+    /// The mesh object whose vertices, edges or faces are selected.
+    pub object: Option<Id<Object>>,
+    pub objects: std::collections::BTreeSet<Id<Object>>,
+    pub vertices: std::collections::BTreeSet<u32>,
+    /// Vertex pairs, smaller index first.
+    pub edges: std::collections::BTreeSet<(u32, u32)>,
+    pub faces: std::collections::BTreeSet<u32>,
+}
+
+impl Selection {
+    /// Drop anything that no longer exists (after deletes, undo or a new project).
+    pub fn retain_valid(&mut self, doc_objects: &Arena<Object>) {
+        self.objects.retain(|id| doc_objects.get(*id).is_some());
+        let mesh = self
+            .object
+            .and_then(|id| doc_objects.get(id))
+            .and_then(|o| o.mesh.as_deref());
+        match mesh {
+            Some(mesh) => {
+                let (v, f) = (mesh.positions.len() as u32, mesh.faces.len() as u32);
+                self.vertices.retain(|i| *i < v);
+                self.edges.retain(|(a, b)| *a < v && *b < v);
+                self.faces.retain(|i| *i < f);
+            }
+            None => {
+                self.object = None;
+                self.vertices.clear();
+                self.edges.clear();
+                self.faces.clear();
+                if self.mode != SelectMode::Object {
+                    self.mode = SelectMode::Object;
+                }
+            }
+        }
+    }
+
+    /// Vertices touched by the selection, whatever the mode.
+    pub fn touched_vertices(&self, mesh: &Mesh) -> std::collections::BTreeSet<u32> {
+        let mut out = self.vertices.clone();
+        for (a, b) in &self.edges {
+            out.insert(*a);
+            out.insert(*b);
+        }
+        for f in &self.faces {
+            if let Some(face) = mesh.faces.get(*f as usize) {
+                out.extend(face.corners.iter().map(|c| c.vertex));
+            }
+        }
+        out
+    }
 }
 
 /// FR-VIEW-05.

@@ -500,3 +500,81 @@ fn every_primitive_is_one_undo_step_with_sane_uvs() {
     .unwrap_err();
     assert_eq!(err.code, ErrorCode::OutOfBounds);
 }
+
+#[test]
+fn box_select_four_then_add_a_fifth() {
+    let mut r = CommandRegistry::new();
+    run(&mut r, "mesh.add_primitive", json!({ "kind": "box" })).unwrap();
+    run(&mut r, "view.camera", json!({ "preset": "front" })).unwrap();
+    run(&mut r, "view.frame", json!({})).unwrap();
+    run(
+        &mut r,
+        "select.mode",
+        json!({ "mode": "vertex", "object": "Box" }),
+    )
+    .unwrap();
+    // Left half of a front view: the four corners at x = -0.5.
+    let s = run(
+        &mut r,
+        "select.box",
+        json!({ "rect": [0.0, 0.0, 0.5, 1.0], "aspect": 1.0 }),
+    )
+    .unwrap();
+    assert_eq!(s["vertices"], 4);
+    let right = (0..8u32)
+        .find(|v| !r.document().selection.vertices.contains(v))
+        .unwrap();
+    let s = run(
+        &mut r,
+        "select.by_ids",
+        json!({ "vertices": [right], "add": true }),
+    )
+    .unwrap();
+    assert_eq!(s["vertices"], 5);
+    assert!(r.history().entries().len() == 1, "selecting is not an edit");
+
+    let before = r.document().selection.clone();
+    run(&mut r, "select.invert", json!({})).unwrap();
+    assert_eq!(r.document().selection.vertices.len(), 3);
+    run(&mut r, "select.invert", json!({})).unwrap();
+    assert_eq!(
+        r.document().selection,
+        before,
+        "invert twice is the original set"
+    );
+}
+
+#[test]
+fn select_faces_by_normal_and_bad_indices_are_refused() {
+    let mut r = CommandRegistry::new();
+    run(&mut r, "mesh.add_primitive", json!({ "kind": "box" })).unwrap();
+    run(
+        &mut r,
+        "select.mode",
+        json!({ "mode": "face", "object": "Box" }),
+    )
+    .unwrap();
+    let s = run(
+        &mut r,
+        "select.by_normal",
+        json!({ "direction": [0, 1, 0] }),
+    )
+    .unwrap();
+    assert_eq!(s["faces"], 1);
+    let q = run(&mut r, "query.selection", json!({})).unwrap();
+    assert_eq!(q["bounds"][0][1], 0.5, "the top face is at y = 0.5");
+    let err = run(&mut r, "select.by_ids", json!({ "faces": [99] })).unwrap_err();
+    assert_eq!(err.code, ErrorCode::OutOfBounds);
+    assert_eq!(
+        r.document().selection.faces.len(),
+        1,
+        "a refused select changes nothing"
+    );
+
+    run(&mut r, "scene.delete", json!({ "objects": ["Box"] })).unwrap();
+    assert_eq!(
+        r.document().selection.mode,
+        quarry_core::model::SelectMode::Object,
+        "editing a deleted mesh ends"
+    );
+}

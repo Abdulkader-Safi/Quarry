@@ -302,6 +302,8 @@ impl CommandRegistry {
         };
         let outcome = catch_unwind(AssertUnwindSafe(|| run(args, &mut cx)));
         let (request, saved) = (cx.request.take(), cx.saved);
+        let objects = working.doc.objects.clone();
+        working.doc.selection.retain_valid(&objects);
         let result = match outcome {
             Ok(result) => result?,
             Err(_) => {
@@ -320,11 +322,15 @@ impl CommandRegistry {
                 let view = self.state.doc.view;
                 self.history.undo(&mut self.state);
                 self.state.doc.view = view;
+                let objects = self.state.doc.objects.clone();
+                self.state.doc.selection.retain_valid(&objects);
             }
             Some(Request::Redo) => {
                 let view = self.state.doc.view;
                 self.history.redo(&mut self.state);
                 self.state.doc.view = view;
+                let objects = self.state.doc.objects.clone();
+                self.state.doc.selection.retain_valid(&objects);
             }
             None if undoable && !same_state(&working, &self.state) => {
                 working.revision = self.next_revision;
