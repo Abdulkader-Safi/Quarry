@@ -75,4 +75,8 @@ Both rows still need a run on the M1 Air 8 GB.
   "Tiles" unless another is named. Tileset padding is both the margin and the gap between tiles.
 - 2026-10-26: FR-MESH-04's check says a box top extrude gives "5 more faces". A region extrude (Blender's
   behaviour) moves the top and adds 4 side quads, 10 faces in all; that is what is built and tested.
+- 2026-10-27: **Agent write sandbox tightened** (security review). Agents could open a project anywhere
+  (reads were allowed) and then `project.save` into that folder. Now an agent may only open projects
+  inside the folders it can write to, `project.save` checks the file it would write, and
+  `project.recover` is human-only. Agents can still read images from any path.
 

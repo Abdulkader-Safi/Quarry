@@ -14,9 +14,34 @@ const WRITES: &[(&str, &str)] = &[
     ("export.run", "path"),
 ];
 
-/// Refuse an agent request that would write outside `roots`.
-pub fn check_agent(command: &str, args: &Value, roots: &[PathBuf]) -> Result<(), CommandError> {
-    for (name, field) in WRITES {
+/// Commands that pick which file later saves go to: the agent may only aim
+/// them inside its folders, or it could open a project elsewhere and save there.
+const RETARGETS: &[(&str, &str)] = &[("project.open", "path")];
+
+/// Human-only: recovery writes to whatever file the autosave names.
+const HUMAN_ONLY: &[&str] = &["project.recover"];
+
+/// Refuse an agent request that would write outside `roots`. `saving_to` is
+/// where `project.save` would write (the open project's file).
+pub fn check_agent(
+    command: &str,
+    args: &Value,
+    roots: &[PathBuf],
+    saving_to: Option<&Path>,
+) -> Result<(), CommandError> {
+    if HUMAN_ONLY.contains(&command) {
+        return Err(CommandError::new(
+            ErrorCode::Forbidden,
+            format!("{command} is for the person at the keyboard; agents cannot run it."),
+        ));
+    }
+    if command == "project.save"
+        && let Some(target) = saving_to
+        && !inside(target, roots)
+    {
+        return Err(refuse(target, roots));
+    }
+    for (name, field) in WRITES.iter().chain(RETARGETS) {
         if *name != command {
             continue;
         }
@@ -24,29 +49,36 @@ pub fn check_agent(command: &str, args: &Value, roots: &[PathBuf]) -> Result<(),
             continue;
         };
         let target = Path::new(target);
-        let allowed = resolve(target).is_some_and(|t| {
-            roots
-                .iter()
-                .filter_map(|r| r.canonicalize().ok())
-                .any(|root| t.starts_with(root))
-        });
-        if !allowed {
-            let folders: Vec<String> = roots.iter().map(|r| r.display().to_string()).collect();
-            return Err(CommandError::new(
-                ErrorCode::Forbidden,
-                format!(
-                    "Agents can only write inside the project folder ({}). {} is outside it; pick a path in that folder.",
-                    if folders.is_empty() {
-                        "none is open yet".into()
-                    } else {
-                        folders.join(", ")
-                    },
-                    target.display()
-                ),
-            ));
+        if !inside(target, roots) {
+            return Err(refuse(target, roots));
         }
     }
     Ok(())
+}
+
+fn inside(target: &Path, roots: &[PathBuf]) -> bool {
+    resolve(target).is_some_and(|t| {
+        roots
+            .iter()
+            .filter_map(|r| r.canonicalize().ok())
+            .any(|root| t.starts_with(root))
+    })
+}
+
+fn refuse(target: &Path, roots: &[PathBuf]) -> CommandError {
+    let folders: Vec<String> = roots.iter().map(|r| r.display().to_string()).collect();
+    CommandError::new(
+        ErrorCode::Forbidden,
+        format!(
+            "Agents can only write inside the project folder ({}). {} is outside it; pick a path in that folder.",
+            if folders.is_empty() {
+                "none is open yet".into()
+            } else {
+                folders.join(", ")
+            },
+            target.display()
+        ),
+    )
 }
 
 /// The real location `path` would be written to: the nearest existing ancestor,
@@ -86,19 +118,49 @@ mod tests {
         std::fs::create_dir_all(&project).unwrap();
         let roots = [project.clone()];
 
-        let inside = json!({ "path": project.join("sub/level.quarry") });
-        assert!(check_agent("project.save_as", &inside, &roots).is_ok());
+        let ok = json!({ "path": project.join("sub/level.quarry") });
+        assert!(check_agent("project.save_as", &ok, &roots, None).is_ok());
 
         for path in [
             root.join("other.quarry"),
             project.join("../escape.quarry"),
             PathBuf::from("relative.quarry"),
         ] {
-            let err = check_agent("project.save_as", &json!({ "path": path }), &roots).unwrap_err();
+            let err =
+                check_agent("project.save_as", &json!({ "path": path }), &roots, None).unwrap_err();
             assert_eq!(err.code, ErrorCode::Forbidden, "{}", path.display());
         }
-        // Reads are not limited.
-        assert!(check_agent("project.open", &json!({ "path": "/tmp/x.quarry" }), &roots).is_ok());
+        // Images may be read from anywhere, but a project opened elsewhere
+        // would make its folder the save target, so that is refused.
+        assert!(check_agent("art.import", &json!({ "path": "/tmp/x.png" }), &roots, None).is_ok());
+        let err = check_agent(
+            "project.open",
+            &json!({ "path": "/tmp/x.quarry" }),
+            &roots,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, ErrorCode::Forbidden);
+        let outside = root.join("elsewhere.quarry");
+        assert!(check_agent("project.save", &json!({}), &roots, Some(&outside)).is_err());
+        assert!(
+            check_agent(
+                "project.save",
+                &json!({}),
+                &roots,
+                Some(&project.join("a.quarry"))
+            )
+            .is_ok()
+        );
+        assert!(
+            check_agent(
+                "project.recover",
+                &json!({ "autosave": "/x" }),
+                &roots,
+                None
+            )
+            .is_err()
+        );
 
         #[cfg(unix)]
         {
@@ -107,7 +169,7 @@ mod tests {
             std::os::unix::fs::symlink(&root, &link).unwrap();
             let via_link = json!({ "path": link.join("x.quarry") });
             assert!(
-                check_agent("project.save_as", &via_link, &roots).is_err(),
+                check_agent("project.save_as", &via_link, &roots, None).is_err(),
                 "symlinks are resolved"
             );
         }

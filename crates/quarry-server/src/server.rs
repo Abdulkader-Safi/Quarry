@@ -96,14 +96,16 @@ impl Server {
             reply,
         } = incoming;
         self.busy.store(true, Ordering::SeqCst);
-        let result = permissions::check_agent(&command, &args, roots).and_then(|()| {
-            let progress_id = id.clone();
-            let progress_reply = reply.clone();
-            registry.execute_with_progress(&command, args, Source::Agent, &mut |p| {
-                let _ =
-                    progress_reply.send(json!({ "id": progress_id, "progress": p }).to_string());
-            })
-        });
+        let saving_to = registry.state().path.clone();
+        let result = permissions::check_agent(&command, &args, roots, saving_to.as_deref())
+            .and_then(|()| {
+                let progress_id = id.clone();
+                let progress_reply = reply.clone();
+                registry.execute_with_progress(&command, args, Source::Agent, &mut |p| {
+                    let _ = progress_reply
+                        .send(json!({ "id": progress_id, "progress": p }).to_string());
+                })
+            });
         self.busy.store(false, Ordering::SeqCst);
         // The registry logs every command it runs; only refusals stop short of it.
         if let Err(e) = &result
