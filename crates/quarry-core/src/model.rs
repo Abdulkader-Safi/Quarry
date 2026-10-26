@@ -227,6 +227,9 @@ pub struct ProjectSettings {
     pub fps: u32,
     pub palette_lock: bool,
     pub grid_step: f32,
+    /// The palette painting snaps to when palette_lock is on.
+    #[serde(default)]
+    pub active_palette: Option<String>,
 }
 
 /// Pixel-art defaults (FR-PROJ-07): 16 px tiles, nearest filter, 1 tile = 1 m.
@@ -238,6 +241,7 @@ impl Default for ProjectSettings {
             fps: 30,
             palette_lock: true,
             grid_step: 1.0,
+            active_palette: None,
         }
     }
 }

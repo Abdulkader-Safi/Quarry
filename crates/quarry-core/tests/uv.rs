@@ -180,3 +180,12 @@ fn unwrapped_textures_are_not_mirrored() {
         assert_eq!(a.signum(), b.signum(), "face {f} is mirrored after unwrap");
     }
 }
+
+#[test]
+fn unwrap_fits_inside_the_faces_texture() {
+    let mut r = editing("box");
+    run(&mut r, "paint.texture_new", json!({ "width": 32, "height": 32 }));
+    run(&mut r, "uv.unwrap", json!({}));
+    let m = mesh(&r);
+    assert!(m.faces.iter().flat_map(|f| &f.corners).all(|c| c.uv.x <= 32.0 + 1e-3 && c.uv.y <= 32.0 + 1e-3));
+}

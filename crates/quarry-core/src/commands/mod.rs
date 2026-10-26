@@ -13,6 +13,7 @@ use std::sync::Arc;
 mod art;
 mod export;
 mod mesh;
+mod paint;
 mod scene;
 mod select;
 mod tile;
@@ -26,6 +27,7 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     scene::register(r);
     uv::register(r);
     export::register(r);
+    paint::register(r);
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
     r.register::<ProjectRecover>();

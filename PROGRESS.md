@@ -12,7 +12,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 | M1 | Core, shell, command server | in progress | core, file, autosave, settings, server, MCP done; app shell waits for the Figma design |
 | M2 | Tiles and linked images | in progress | commands, linked art and live refresh (~135 ms) done headless; UI waits for the design |
 | M3 | Mesh editing, UVs, scene | in progress | all commands done headless (primitives, selection, edits, mirror, scene, UV); UI waits for the design |
-| M4 | Painting | not started | |
+| M4 | Painting | in progress | paint commands, 3D strokes and pressure sizing done headless; UI waits for the design |
 | M5 | glTF export and import | in progress | export and import done headless (goldens validate 0/0/0); Cairn, Blender and Kenney checks need Safi |
 | M6 | Rigging | not started | |
 | M7 | Animation | not started | |

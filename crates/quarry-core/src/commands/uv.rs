@@ -52,6 +52,16 @@ fn faces_and_mesh<'a>(
     Ok((faces, world, mesh))
 }
 
+/// Size of the image the edited mesh's first textured face uses, if any.
+fn image_size(cx: &Context) -> Option<Vec2> {
+    let doc = &cx.state.doc;
+    let (_, mesh) = edit_mesh(doc).ok()?;
+    let image = mesh.faces.iter().find_map(|f| f.image)?;
+    doc.images
+        .get(image)
+        .map(|i| Vec2::new(i.size[0] as f32, i.size[1] as f32))
+}
+
 fn tile_px(cx: &Context) -> f32 {
     cx.state.doc.settings.tile_px as f32
 }
@@ -193,10 +203,11 @@ pub struct UvUnwrap {}
 
 impl Command for UvUnwrap {
     const NAME: &'static str = "uv.unwrap";
-    const DESCRIPTION: &'static str = "Unfold the selected faces (all faces when none are selected) flat, cutting along seams, at 1 m per tile, and lay the pieces out without overlap.";
+    const DESCRIPTION: &'static str = "Unfold the selected faces (all faces when none are selected) flat, cutting along seams, at 1 m per tile, and lay the pieces out without overlap, shrunk to fit the texture if needed.";
 
     fn run(self, cx: &mut Context) -> CommandResult {
         let px = tile_px(cx);
+        let fit = image_size(cx);
         let (faces, _, mesh) = faces_and_mesh(cx)?;
         let chosen: BTreeSet<usize> = faces.iter().copied().collect();
         let mut owners: BTreeMap<(u32, u32), Vec<usize>> = BTreeMap::new();
@@ -290,14 +301,19 @@ impl Command for UvUnwrap {
             x += size.x + PADDING;
             row_h = row_h.max(size.y);
         }
+        // Shrink the whole layout to fit the faces' image if it is too big.
+        let extent = (0..islands.len()).fold(Vec2::ZERO, |m, i| m.max(boxes[i].1 + offset[i]));
+        let shrink = fit.map_or(1.0, |size| {
+            (size / extent.max(Vec2::ONE)).min_element().min(1.0)
+        });
         for (i, island) in islands.iter().enumerate() {
             for f in island {
                 for c in &mut mesh.faces[*f].corners {
-                    c.uv = to_px(placed[f][&c.vertex]) + offset[i];
+                    c.uv = (to_px(placed[f][&c.vertex]) + offset[i]) * shrink;
                 }
             }
         }
-        Ok(json!({ "faces": faces.len(), "islands": islands.len() }))
+        Ok(json!({ "faces": faces.len(), "islands": islands.len(), "scale": shrink }))
     }
 }
 

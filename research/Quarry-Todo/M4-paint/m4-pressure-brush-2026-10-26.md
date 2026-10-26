@@ -5,7 +5,7 @@ priority: "high"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T09:57:15.000Z"
+modified: "2026-10-27T04:30:00.000Z"
 labels: ["m4", "paint", "input"]
 order: 43
 ---
@@ -22,5 +22,11 @@ FR-PAINT-03.
 
 **Done when**
 - [ ] Light and heavy pen strokes produce 1 px and 3 px lines at max size 3.
-- [ ] Pressure never produces sub-pixel or zero-size strokes.
+- [x] Pressure never produces sub-pixel or zero-size strokes.
 - [ ] Without a tablet, painting is unchanged.
+
+## Backend done 2026-10-27
+
+- `quarry-ops::paint::pressure_size(pressure, max)`: whole pixels, 1 at a light touch, max at full, never 0, max when there is no tablet. `paint.stroke_3d` takes per-point `pressures`.
+- Tested: pressure 0.15 at size 3 paints 1 texel, 1.0 paints a 3x3 stamp.
+- Left: feeding the M0 pen readout into the brush in the app, the size ramp in Settings, and the hand test with a tablet.
