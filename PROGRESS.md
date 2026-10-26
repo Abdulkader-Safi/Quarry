@@ -10,7 +10,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 |---|-------|-------|-------|
 | M0 | De-risk: workspace, CI, viewport, pen, skin, PSD | in progress | |
 | M1 | Core, shell, command server | in progress | core, file, autosave, settings, server, MCP done; app shell waits for the Figma design |
-| M2 | Tiles and linked images | in progress | tile and art commands done headless; watcher next; UI waits for the design |
+| M2 | Tiles and linked images | in progress | commands, linked art and live refresh (~135 ms) done headless; UI waits for the design |
 | M3 | Mesh editing, UVs, scene | not started | |
 | M4 | Painting | not started | |
 | M5 | glTF export and import | not started | |

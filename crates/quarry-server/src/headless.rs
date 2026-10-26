@@ -11,6 +11,7 @@ use quarry_core::{CommandRegistry, Source};
 use quarry_io::autosave::{Autosaver, write_autosave};
 use quarry_io::project::QuarryFiles;
 use quarry_io::settings::{Dirs, Settings};
+use quarry_io::watcher::ArtWatcher;
 use serde_json::{Value, json};
 use std::io::BufRead;
 use std::path::PathBuf;
@@ -98,12 +99,21 @@ pub fn run(options: Options) -> Result<(), String> {
     let mut autosaver = Autosaver::new(settings.autosave_minutes, registry.state().revision);
     let mut last_request = Instant::now();
     let mut had_client = false;
+    let mut watcher = ArtWatcher::new()?;
+    watcher.sync(registry.document());
 
     loop {
-        if let Some(incoming) = server.recv_timeout(Duration::from_millis(200)) {
+        if let Some(incoming) = server.recv_timeout(Duration::from_millis(50)) {
             let roots = roots(&options, &registry);
             server.handle(incoming, &mut registry, &roots);
+            watcher.sync(registry.document());
             last_request = Instant::now();
+        }
+        for id in watcher.changed(registry.document()) {
+            let args = json!({ "image": id.to_string() });
+            if let Err(e) = registry.execute("art.reload", args, Source::Human) {
+                tracing::warn!("live refresh: {}", e.message);
+            }
         }
         let state = registry.state();
         if autosaver.due(Instant::now(), state.revision) {

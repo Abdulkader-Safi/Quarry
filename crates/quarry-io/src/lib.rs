@@ -8,3 +8,4 @@ pub mod migrate;
 pub mod project;
 pub mod psd;
 pub mod settings;
+pub mod watcher;

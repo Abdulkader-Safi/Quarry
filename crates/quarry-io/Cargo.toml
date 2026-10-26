@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 quarry-core = { path = "../quarry-core" }
 zip.workspace = true
+notify.workspace = true
+notify-debouncer-full.workspace = true
 directories.workspace = true
 serde.workspace = true
 tracing.workspace = true
