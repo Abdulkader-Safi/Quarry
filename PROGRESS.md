@@ -25,7 +25,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 |---|---|---|---|---|
 | Viewport fps, 100k tri / 50 bones / 5 skinned @1600x1000 | 60 / ≥30 | 100 fps, M2 Pro 16 GB (see note) | | |
 | Input latency | < 50 ms | | | |
-| Pen pressure | values arrive | | | |
+| Pen pressure | values arrive | NSEvent monitor + on-screen readout built; hand test pending | octotablet not wired, not tested | not tested |
 | PSD composite | matches PNG | reader + `xtask psd-check` ready; Affinity and Photoshop files not yet checked | | |
 | 3-bone GLB in Cairn | bends, 0 validator errors | validator: 0 errors, 0 warnings; Cairn and Blender not yet checked | | |
 

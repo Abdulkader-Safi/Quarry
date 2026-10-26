@@ -4925,10 +4925,12 @@ dependencies = [
 name = "quarry"
 version = "0.1.0"
 dependencies = [
+ "block2 0.6.2",
  "glam",
  "gpui-kit",
  "image",
  "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
  "objc2-core-video",
  "objc2-io-surface",

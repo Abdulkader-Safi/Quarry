@@ -1,6 +1,8 @@
 //! M0 viewport spike: a GPUI window showing a wgpu-rendered scene.
 
 #[cfg(target_os = "macos")]
+mod pen;
+#[cfg(target_os = "macos")]
 mod present;
 #[cfg(not(target_os = "macos"))]
 mod readback;
@@ -48,7 +50,25 @@ impl Render for Spike {
         }
 
         window.request_animation_frame();
-        div().size_full().child(self.presenter.element())
+        #[cfg(target_os = "macos")]
+        let readout = pen::reading();
+        #[cfg(not(target_os = "macos"))]
+        let readout = "pressure: not wired on this OS (M0 pen spike is macOS only)".to_string();
+        div()
+            .size_full()
+            .relative()
+            .child(self.presenter.element())
+            .child(
+                div()
+                    .absolute()
+                    .top(px(12.0))
+                    .left(px(12.0))
+                    .px(px(8.0))
+                    .py(px(4.0))
+                    .bg(rgb(0x000000))
+                    .text_color(rgb(0xffffff))
+                    .child(readout),
+            )
     }
 }
 
@@ -99,6 +119,8 @@ fn main() {
 
     gpui_kit::application().run(move |cx| {
         gpui_kit::init(cx);
+        #[cfg(target_os = "macos")]
+        pen::install();
         let result = gpui_kit::open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::new(
