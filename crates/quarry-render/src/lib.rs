@@ -272,7 +272,7 @@ impl Renderer {
     pub fn render(&self, time: f32) -> wgpu::SubmissionIndex {
         let mut palette = [[0f32; 4]; 4 * MAX_BONES];
         for bone in 0..50 {
-            let angle = (time * 1.5 + bone as f32 * 0.35).sin() * 0.25;
+            let angle = (time * 1.5 + bone as f32 * 0.35).sin() * 0.06;
             let m = Mat4::from_rotation_y(angle);
             palette[bone * 4..bone * 4 + 4].copy_from_slice(&m.to_cols_array_2d());
         }
