@@ -1,11 +1,11 @@
 ---
 id: "m0-viewport-spike-macos-2026-10-26"
-status: "todo"
+status: "review"
 priority: "critical"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T15:25:00.000Z"
+modified: "2026-10-26T16:40:00.000Z"
 labels: ["m0", "render", "spike"]
 order: 3
 ---
@@ -22,7 +22,7 @@ The riskiest decision in the project. Settle it with numbers.
 
 **Done when**
 - [ ] 60 fps sustained and input latency under 50 ms on the M1 MacBook Air 8 GB.
-- [ ] Numbers and the exact interop approach written into `PROGRESS.md`.
+- [x] Numbers and the exact interop approach written into `PROGRESS.md`.
 - [ ] If it misses: record the failure, switch the `quarry` app crate to egui 0.37 + egui-wgpu, and note it — that is the only pre-approved swap.
 
 ## Progress
@@ -32,4 +32,5 @@ The riskiest decision in the project. Settle it with numbers.
 - fps: 100 (display refresh) frontmost; renderer alone 0.10 ms/frame; 1.6M tris 0.80 ms.
 - `--present-check`: mean channel error 1.35/255 vs the scene target, 2596 distinct colours.
 - Spec deviation recorded in `PROGRESS.md`: `paint_surface` needs NV12, not BGRA.
-- Left: input latency (click → rendered frame), and the numbers on the M1 Air 8 GB.
+- Input latency: `--latency-check`, ~10 ms click-to-frame frontmost, ~40 ms when throttled in the background. Details in `PROGRESS.md`.
+- Left for review: run `cargo run -p quarry --release` and `-- --latency-check` on the M1 Air 8 GB and record both numbers.

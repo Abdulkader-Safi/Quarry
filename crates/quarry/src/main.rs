@@ -25,6 +25,40 @@ struct Spike {
     report_at: Instant,
     frames: u32,
     quit_after: Option<Duration>,
+    /// Click-to-frame latencies in ms; `--latency-check` posts its own clicks.
+    latencies: Vec<f64>,
+    latency_check: bool,
+}
+
+impl Spike {
+    /// Click (event timestamp) to the end of the frame that follows it. The
+    /// display shows that frame at the next refresh, up to one interval later.
+    #[cfg(target_os = "macos")]
+    fn measure_latency(&mut self, elapsed: Duration, cx: &mut Context<Self>) {
+        if let Some(clicked) = pen::take_click() {
+            let ms = (pen::uptime() - clicked) * 1000.0;
+            println!("click_to_frame_ms={ms:.1}");
+            self.latencies.push(ms);
+        }
+        if !self.latency_check || elapsed < Duration::from_secs(2) {
+            return;
+        }
+        if self.latencies.len() >= 30 {
+            let mut sorted = self.latencies.clone();
+            sorted.sort_by(f64::total_cmp);
+            println!(
+                "latency samples={} median_ms={:.1} max_ms={:.1}",
+                sorted.len(),
+                sorted[sorted.len() / 2],
+                sorted[sorted.len() - 1]
+            );
+            cx.quit();
+        } else if self.frames.is_multiple_of(10) {
+            pen::post_click(
+                objc2::MainThreadMarker::new().expect("render runs on the main thread"),
+            );
+        }
+    }
 }
 
 impl Render for Spike {
@@ -37,6 +71,9 @@ impl Render for Spike {
         }
         #[cfg(not(target_os = "macos"))]
         self.presenter.render(&self.renderer, elapsed.as_secs_f32());
+
+        #[cfg(target_os = "macos")]
+        self.measure_latency(elapsed, cx);
 
         self.frames += 1;
         let since_report = self.report_at.elapsed();
@@ -116,6 +153,7 @@ fn main() {
     }
 
     let quit_after = number("--secs").map(Duration::from_secs_f32);
+    let latency_check = has("--latency-check");
 
     gpui_kit::application().run(move |cx| {
         gpui_kit::init(cx);
@@ -142,6 +180,8 @@ fn main() {
                         report_at: Instant::now(),
                         frames: 0,
                         quit_after,
+                        latencies: Vec::new(),
+                        latency_check,
                     }
                 })
             },

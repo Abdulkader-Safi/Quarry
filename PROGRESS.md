@@ -24,7 +24,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 | Check | Target | macOS (M1, 8 GB) | Windows | Linux |
 |---|---|---|---|---|
 | Viewport fps, 100k tri / 50 bones / 5 skinned @1600x1000 | 60 / ≥30 | 100 fps, M2 Pro 16 GB (see note) | | |
-| Input latency | < 50 ms | | | |
+| Input latency | < 50 ms | ~10 ms click-to-frame frontmost (+≤10 ms to display), M2 Pro (see note) | | |
 | Pen pressure | values arrive | NSEvent monitor + on-screen readout built; hand test pending | octotablet not wired, not tested | not tested |
 | PSD composite | matches PNG | reader + `xtask psd-check` ready; Affinity and Photoshop files not yet checked | | |
 | 3-bone GLB in Cairn | bends, 0 validator errors | validator: 0 errors, 0 warnings; Cairn and Blender not yet checked | | |
@@ -33,8 +33,14 @@ Note on the fps row: measured on the development machine (MacBook Pro M2 Pro, 16
 display), not yet on the M1 Air 8 GB the spec targets. Presentation is capped by the display:
 100 fps when the window is frontmost, 25 fps when macOS occludes/throttles a background window.
 Renderer-only cost, measured offscreen with a submission fence: 0.10 ms/frame at 100k tris
-(1.6M tris → 0.80 ms/frame), so the scene leaves the whole frame budget free. Input latency
-still unmeasured — that is the rest of this card.
+(1.6M tris → 0.80 ms/frame), so the scene leaves the whole frame budget free.
+
+Note on latency: `--latency-check` posts 30 left clicks and measures from each event's
+timestamp to the end of the next frame. Frontmost at 100 Hz: 8.8 to 11.2 ms, so under 21 ms
+once the display shows the frame. Throttled in the background at 25 fps: about 40 ms. One
+outlier of 88 ms at the moment the window came forward. Synthetic clicks skip the HID path,
+so real clicks add a few ms; clicking in the window prints `click_to_frame_ms` for a hand check.
+Both rows still need a run on the M1 Air 8 GB.
 
 ## Decisions and deviations
 

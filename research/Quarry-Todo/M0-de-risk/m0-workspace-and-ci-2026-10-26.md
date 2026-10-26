@@ -1,11 +1,11 @@
 ---
 id: "m0-workspace-and-ci-2026-10-26"
-status: "in-progress"
+status: "done"
 priority: "critical"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T10:01:40.000Z"
+modified: "2026-10-26T16:15:00.000Z"
 labels: ["m0", "infra"]
 order: 2
 ---
@@ -22,12 +22,13 @@ Prove the repo can be built and policed on all three OSes before writing feature
 - Spec lives in `docs/spec/` (`01-product` … `06-build-spec`); add `PROGRESS.md` with the milestone list and an empty measurements table.
 
 **Done when**
-- [ ] `cargo check --workspace` is green in all three CI jobs.
-- [ ] `cargo deny check` passes with the allow list.
-- [ ] `PROGRESS.md` exists and lists M0–M9.
-- [ ] First commit is `M0: workspace and CI`.
+- [x] `cargo check --workspace` is green in all three CI jobs.
+- [x] `cargo deny check` passes with the allow list.
+- [x] `PROGRESS.md` exists and lists M0–M9.
+- [x] First commit is `M0: workspace and CI`.
 
 **Progress 2026-10-26**
 - Workspace, seven crates, `xtask`, `deny.toml`, CI matrix, `docs/spec/` and `PROGRESS.md` are in place.
 - `cargo fmt`, `clippy -D warnings`, `test` and `cargo deny check` are green locally.
 - Remaining: the first CI run on all three OSes.
+- 2026-10-26: CI green on macos-14, windows-latest and ubuntu-22.04 (run 40320134647) after installing GPUI's Linux libraries. A gltf-validator job runs the goldens through the Khronos validator.
