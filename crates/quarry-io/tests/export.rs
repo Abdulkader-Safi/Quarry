@@ -27,6 +27,63 @@ fn run(r: &mut CommandRegistry, name: &str, args: Value) -> Value {
         .unwrap_or_else(|e| panic!("{name}: {}", e.message))
 }
 
+/// Equal GLBs, allowing the last-bit float differences between operating
+/// systems' maths libraries (sin, acos and friends): the JSON must match with
+/// numbers within 1e-5, and the binary chunk word for word, or as floats
+/// within 1e-5. Anything structural (counts, sizes, names) must be identical.
+fn same_glb(a: &[u8], b: &[u8]) -> bool {
+    if a == b {
+        return true;
+    }
+    fn chunks(g: &[u8]) -> Option<(&[u8], &[u8])> {
+        let word =
+            |at: usize| Some(u32::from_le_bytes(g.get(at..at + 4)?.try_into().ok()?) as usize);
+        let json_len = word(12)?;
+        let json = g.get(20..20 + json_len)?;
+        let bin_len = word(20 + json_len)?;
+        let bin = g.get(28 + json_len..28 + json_len + bin_len)?;
+        Some((json, bin))
+    }
+    fn close(x: f64, y: f64) -> bool {
+        (x - y).abs() <= 1e-5 * x.abs().max(y.abs()).max(1.0)
+    }
+    fn same_json(x: &Value, y: &Value) -> bool {
+        match (x, y) {
+            (Value::Number(p), Value::Number(q)) => close(p.as_f64().unwrap(), q.as_f64().unwrap()),
+            (Value::Array(p), Value::Array(q)) => {
+                p.len() == q.len() && p.iter().zip(q).all(|(p, q)| same_json(p, q))
+            }
+            (Value::Object(p), Value::Object(q)) => {
+                p.len() == q.len()
+                    && p.iter()
+                        .all(|(k, v)| q.get(k).is_some_and(|w| same_json(v, w)))
+            }
+            _ => x == y,
+        }
+    }
+    let (Some((ja, ba)), Some((jb, bb))) = (chunks(a), chunks(b)) else {
+        return false;
+    };
+    let (Ok(ja), Ok(jb)) = (
+        serde_json::from_slice::<Value>(ja),
+        serde_json::from_slice::<Value>(jb),
+    ) else {
+        return false;
+    };
+    same_json(&ja, &jb)
+        && ba.len() == bb.len()
+        && ba.chunks(4).zip(bb.chunks(4)).all(|(p, q)| {
+            p == q
+                || (p.len() == 4 && {
+                    let (x, y) = (
+                        f32::from_le_bytes(p.try_into().unwrap()),
+                        f32::from_le_bytes(q.try_into().unwrap()),
+                    );
+                    x.is_finite() && y.is_finite() && close(x as f64, y as f64)
+                })
+        })
+}
+
 /// Compare with (or rewrite) a golden, then hand back the bytes.
 fn golden(name: &str, file: &Path) -> Vec<u8> {
     let bytes = std::fs::read(file).unwrap();
@@ -39,7 +96,7 @@ fn golden(name: &str, file: &Path) -> Vec<u8> {
     let expected = std::fs::read(&path)
         .unwrap_or_else(|_| panic!("{name} golden missing; set QUARRY_UPDATE_GOLDENS=1"));
     assert!(
-        bytes == expected,
+        same_glb(&bytes, &expected),
         "{name} differs from its golden; rerun with QUARRY_UPDATE_GOLDENS=1 if that is intended"
     );
     bytes
