@@ -25,8 +25,10 @@ struct Spike {
     report_at: Instant,
     frames: u32,
     quit_after: Option<Duration>,
-    /// Click-to-frame latencies in ms; `--latency-check` posts its own clicks.
+    /// Click-to-frame latencies in ms; `--latency-check` posts its own clicks (macOS).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     latencies: Vec<f64>,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     latency_check: bool,
 }
 
