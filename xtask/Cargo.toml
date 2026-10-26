@@ -10,3 +10,5 @@ publish.workspace = true
 [dependencies]
 quarry-io = { path = "../crates/quarry-io" }
 image.workspace = true
+quarry-core = { path = "../crates/quarry-core" }
+serde_json.workspace = true

@@ -120,3 +120,16 @@ fn an_exported_rig_imports_back_with_the_same_rest_skeleton() {
         "the skeleton root node is kept as a layer"
     );
 }
+
+#[test]
+fn the_sample_robot_opens_with_its_rig_and_clips() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/samples/sample-robot.quarry");
+    let mut r = registry();
+    run(&mut r, "project.open", json!({ "path": path }));
+    let doc = r.document();
+    assert_eq!(doc.skeletons.iter().next().unwrap().bones.len(), 13);
+    let clips: Vec<&str> = doc.clips.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(clips, ["idle", "walk"]);
+    assert_eq!(doc.objects.len(), 11);
+}

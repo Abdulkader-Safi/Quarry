@@ -1,7 +1,9 @@
 //! Repo tasks. Usage: cargo run -p xtask -- <task>
 //!
-//! Tasks: validate-gltf, psd-check <file.psd> <flattened.png>, agent-session,
+//! Tasks: validate-gltf, psd-check <file.psd> <flattened.png>, agent-session, samples,
 //! bench (M9), goldens (M5).
+
+mod samples;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
@@ -11,6 +13,7 @@ fn main() {
     match task.as_str() {
         "validate-gltf" => validate_gltf(),
         "agent-session" => agent_session(),
+        "samples" => samples::build(&Path::new(env!("CARGO_MANIFEST_DIR")).join("..")),
         "psd-check" => {
             let args: Vec<String> = std::env::args().skip(2).collect();
             let [psd, png] = args.as_slice() else {
@@ -20,7 +23,7 @@ fn main() {
             psd_check(Path::new(psd), Path::new(png));
         }
         "" => eprintln!(
-            "usage: cargo run -p xtask -- <validate-gltf|psd-check|agent-session|bench|goldens>"
+            "usage: cargo run -p xtask -- <validate-gltf|psd-check|agent-session|samples|bench|goldens>"
         ),
         other => {
             eprintln!("xtask: '{other}' lands in a later milestone");

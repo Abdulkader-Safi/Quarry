@@ -53,7 +53,34 @@ pub fn snapshot(doc: &Document) -> Snapshot {
             continue;
         };
         let world = doc.world_matrix(object);
-        add_mesh(doc, mesh, world, &mut batches, &mut bounds);
+        // Skinned meshes show their skeleton's current pose (CPU skinning).
+        let skinning = object
+            .skin
+            .as_ref()
+            .filter(|_| mesh.weights.len() == mesh.positions.len())
+            .and_then(|k| doc.skeletons.get(k.skeleton))
+            .map(|s| s.skinning());
+        let points: Vec<Vec3> = mesh
+            .positions
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let p = world.transform_point3(*p);
+                match &skinning {
+                    Some(m) => {
+                        let w = mesh.weights[i];
+                        (0..4).fold(Vec3::ZERO, |acc, k| {
+                            acc + m
+                                .get(w.bones[k] as usize)
+                                .map_or(p, |m| m.transform_point3(p))
+                                * w.weights[k]
+                        })
+                    }
+                    None => p,
+                }
+            })
+            .collect();
+        add_mesh(doc, mesh, &points, world, &mut batches, &mut bounds);
     }
 
     let images = doc
@@ -78,6 +105,8 @@ pub fn snapshot(doc: &Document) -> Snapshot {
 fn add_mesh(
     doc: &Document,
     mesh: &Mesh,
+    // World position of each vertex, posed when skinned.
+    world_points: &[Vec3],
     world: Mat4,
     batches: &mut Vec<Batch>,
     bounds: &mut Option<(Vec3, Vec3)>,
@@ -94,7 +123,7 @@ fn add_mesh(
         }
         let points: Vec<Vec3> = corners
             .iter()
-            .map(|c| world.transform_point3(mesh.positions[c.vertex as usize]))
+            .map(|c| world_points[c.vertex as usize])
             .collect();
         // Newell's method: a stable normal for triangles and slightly bent quads.
         let mut normal = Vec3::ZERO;
@@ -195,5 +224,41 @@ mod tests {
         let s = snapshot(r.document());
         assert_eq!(s.triangle_count(), 0);
         assert!(s.bounds.is_none());
+    }
+}
+
+#[cfg(test)]
+mod pose_tests {
+    use super::*;
+    use quarry_core::{CommandRegistry, Source};
+    use serde_json::json;
+
+    #[test]
+    fn a_posed_skeleton_moves_what_is_drawn() {
+        let mut r = CommandRegistry::new();
+        let mut run = |n: &str, a: serde_json::Value| r.execute(n, a, Source::Human).unwrap();
+        run("rig.skeleton_new", json!({}));
+        run(
+            "rig.bone_add",
+            json!({ "name": "b", "head": [0, 0, 0], "tail": [0, 1, 0] }),
+        );
+        run(
+            "mesh.add_primitive",
+            json!({ "kind": "box", "name": "M", "position": [0, 0.5, 0], "size": [0.2, 1, 0.2] }),
+        );
+        run("rig.bind_rigid", json!({ "object": "M", "bone": "b" }));
+        let rest = snapshot(r.document()).bounds.unwrap();
+        r.execute(
+            "rig.pose",
+            json!({ "bone": "b", "rotation": [0, 0, 90] }),
+            Source::Human,
+        )
+        .unwrap();
+        let posed = snapshot(r.document()).bounds.unwrap();
+        assert!(
+            rest.1.y > 0.9 && posed.1.y < 0.2,
+            "the box now lies along -X: {posed:?}"
+        );
+        assert!(posed.0.x < -0.9);
     }
 }
