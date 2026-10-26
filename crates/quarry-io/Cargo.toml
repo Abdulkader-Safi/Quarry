@@ -8,6 +8,8 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+quarry-core = { path = "../quarry-core" }
+zip.workspace = true
 gltf-json = { workspace = true, features = ["names"] }
 bytemuck.workspace = true
 psd.workspace = true
@@ -17,3 +19,5 @@ serde_json.workspace = true
 [dev-dependencies]
 gltf.workspace = true
 glam.workspace = true
+zip.workspace = true
+quarry-core = { path = "../quarry-core" }
