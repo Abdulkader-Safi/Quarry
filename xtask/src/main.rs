@@ -170,7 +170,7 @@ fn bench() {
     let started = Instant::now();
     for i in 0..450 {
         let (x, z) = ((i % 30) as f32 * 1.2, (i / 30) as f32 * 1.2);
-        run(
+        timed(
             &mut r,
             "mesh.add_primitive",
             json!({ "kind": "sphere", "segments": 16, "position": [x, 0.5, z] }),
@@ -187,7 +187,7 @@ fn bench() {
     let file = dir.join("bench.quarry");
     let save = timed(&mut r, "project.save_as", json!({ "path": file }));
     let open = timed(&mut r, "project.open", json!({ "path": file }));
-    let export = run(
+    let export = timed(
         &mut r,
         "export.run",
         json!({ "path": dir.join("bench.glb") }),
