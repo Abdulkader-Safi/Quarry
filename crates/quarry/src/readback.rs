@@ -16,10 +16,6 @@ impl Presenter {
         })
     }
 
-    pub fn present(&mut self) {
-        // The image is rebuilt in `render` below; nothing to convert on this path.
-    }
-
     /// Render one frame and copy it back to the CPU.
     pub fn render(&mut self, renderer: &quarry_render::Renderer, time: f32) {
         renderer.render(time);
