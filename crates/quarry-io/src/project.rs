@@ -73,6 +73,10 @@ impl Storage for QuarryFiles {
         crate::export::export(doc, request)
     }
 
+    fn import_gltf(&self, path: &Path) -> Result<Document, CommandError> {
+        crate::import::import(path)
+    }
+
     fn recover(&self, autosave: &Path) -> Result<(Document, Option<PathBuf>), CommandError> {
         let doc = read_project(autosave)?;
         let sidecar: Option<autosave::Sidecar> = std::fs::read(autosave.with_extension("json"))

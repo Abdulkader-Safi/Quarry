@@ -68,6 +68,69 @@ impl Document {
         }
     }
 
+    /// Add everything from `other` (an imported fragment) with fresh IDs and
+    /// unique names, fixing every reference. Returns the new top-level objects.
+    pub fn merge(&mut self, other: Document) -> Vec<Id<Object>> {
+        use std::collections::HashMap;
+        let mut images: HashMap<Id<Image>, Id<Image>> = HashMap::new();
+        for mut image in other.images.iter().cloned() {
+            let old = image.id;
+            image.name = self.images.unique_name(&image.name);
+            images.insert(old, self.images.insert(image));
+        }
+        let mut skeletons: HashMap<Id<Skeleton>, Id<Skeleton>> = HashMap::new();
+        for mut skeleton in other.skeletons.iter().cloned() {
+            let old = skeleton.id;
+            skeleton.name = self.skeletons.unique_name(&skeleton.name);
+            skeletons.insert(old, self.skeletons.insert(skeleton));
+        }
+        for mut clip in other.clips.iter().cloned() {
+            match skeletons.get(&clip.skeleton) {
+                Some(s) => clip.skeleton = *s,
+                None => continue,
+            }
+            clip.name = self.clips.unique_name(&clip.name);
+            self.clips.insert(clip);
+        }
+        // Objects first with new IDs, then their references.
+        let mut objects: HashMap<Id<Object>, Id<Object>> = HashMap::new();
+        for mut object in other.objects.iter().cloned() {
+            let old = object.id;
+            object.name = self.objects.unique_name(&object.name);
+            objects.insert(old, self.objects.insert(object));
+        }
+        let base_order = self
+            .objects
+            .iter()
+            .filter(|o| o.parent.is_none())
+            .map(|o| o.order + 1)
+            .max()
+            .unwrap_or(0);
+        let mut roots = Vec::new();
+        for (old, new) in &objects {
+            let o = self.objects.get_mut(*new).expect("just inserted");
+            o.parent = o.parent.and_then(|p| objects.get(&p).copied());
+            o.instance_of = o.instance_of.and_then(|s| objects.get(&s).copied());
+            if let Some(skin) = &mut o.skin {
+                match skeletons.get(&skin.skeleton) {
+                    Some(s) => skin.skeleton = *s,
+                    None => o.skin = None,
+                }
+            }
+            if let Some(mesh) = &mut o.mesh {
+                for face in &mut Arc::make_mut(mesh).faces {
+                    face.image = face.image.and_then(|i| images.get(&i).copied());
+                }
+            }
+            if o.parent.is_none() {
+                o.order += base_order;
+                roots.push((other.objects.get(*old).map_or(0, |x| x.order), *new));
+            }
+        }
+        roots.sort();
+        roots.into_iter().map(|(_, id)| id).collect()
+    }
+
     /// World matrix of `object`, following parents (cycles cut at 64 levels).
     pub fn world_matrix(&self, object: &Object) -> glam::Mat4 {
         let mut matrix = glam::Mat4::IDENTITY;

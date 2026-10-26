@@ -12,6 +12,40 @@ use std::path::PathBuf;
 
 pub(super) fn register(r: &mut CommandRegistry) {
     r.register::<ExportRun>();
+    r.register::<ImportGltf>();
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ImportGltf {
+    /// A .gltf or .glb file.
+    pub path: PathBuf,
+}
+
+impl Command for ImportGltf {
+    const NAME: &'static str = "import.gltf";
+    const DESCRIPTION: &'static str = "Import a .gltf or .glb: each node stays its own object with its name, textures are copied in, skins become editable skeletons and animations become clips. One undo step.";
+    const LONG: bool = true;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        cx.step(0.0)?;
+        let fragment = cx.storage()?.import_gltf(&self.path)?;
+        cx.step(0.9)?;
+        let counts = (
+            fragment.objects.len(),
+            fragment.images.len(),
+            fragment.skeletons.len(),
+            fragment.clips.len(),
+        );
+        let roots = cx.doc().merge(fragment);
+        Ok(serde_json::json!({
+            "objects": counts.0,
+            "images": counts.1,
+            "skeletons": counts.2,
+            "clips": counts.3,
+            "roots": roots,
+        }))
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]

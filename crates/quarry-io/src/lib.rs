@@ -4,6 +4,7 @@ pub mod autosave;
 pub mod export;
 pub mod glb;
 pub mod images;
+pub mod import;
 pub mod logging;
 pub mod migrate;
 pub mod project;

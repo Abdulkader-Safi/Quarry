@@ -86,6 +86,8 @@ pub trait Storage: Send + Sync {
     fn read_image(&self, path: &Path) -> Result<LoadedImage, CommandError>;
     /// Write a glTF export and check it; returns the files and a report.
     fn export(&self, doc: &Document, request: &ExportRequest) -> Result<Value, CommandError>;
+    /// Read a .gltf or .glb as a document fragment to merge in.
+    fn import_gltf(&self, path: &Path) -> Result<Document, CommandError>;
 }
 
 /// What `export.run` asks storage to write.
