@@ -44,15 +44,13 @@ fn default_addr() -> io::Result<SocketAddr> {
 
 #[cfg(unix)]
 fn default_addr() -> io::Result<SocketAddr> {
-    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-    // XDG_RUNTIME_DIR (Linux) and TMPDIR (macOS) are already private to the user.
+    use std::os::unix::fs::DirBuilderExt;
+    // XDG_RUNTIME_DIR (Linux) and TMPDIR (macOS) are normally private to the user.
     let private = ["XDG_RUNTIME_DIR", "TMPDIR"]
         .iter()
         .filter_map(std::env::var_os)
         .map(PathBuf::from)
-        .find(|dir| {
-            std::fs::metadata(dir).is_ok_and(|m| m.is_dir() && m.permissions().mode() & 0o077 == 0)
-        });
+        .find(|dir| private_to_us(dir).is_ok());
     let dir = match private {
         Some(dir) => dir,
         None => {
@@ -62,17 +60,43 @@ fn default_addr() -> io::Result<SocketAddr> {
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(e) => return Err(e),
             }
-            let mode = std::fs::metadata(&dir)?.permissions().mode();
-            if mode & 0o077 != 0 {
-                return Err(io::Error::other(format!(
-                    "{} is readable by other users; remove it or set QUARRY_SOCKET",
-                    dir.display()
-                )));
-            }
+            private_to_us(&dir)?;
             dir
         }
     };
     Ok(SocketAddr(
         dir.join("quarry.sock").to_string_lossy().into_owned(),
     ))
+}
+
+/// A real folder (not a symlink), owned by this user, closed to everyone else.
+/// Anything else could let another local user sit on the socket path.
+#[cfg(unix)]
+fn private_to_us(dir: &std::path::Path) -> io::Result<()> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let meta = std::fs::symlink_metadata(dir)?;
+    // SAFETY: geteuid has no preconditions and cannot fail.
+    let us = unsafe { libc::geteuid() };
+    if meta.is_dir() && meta.uid() == us && meta.permissions().mode() & 0o077 == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!(
+            "{} is not a folder private to you; remove it or set QUARRY_SOCKET",
+            dir.display()
+        )))
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_socket_sits_in_a_folder_only_we_own() {
+        let addr = default_addr().unwrap();
+        let dir = std::path::Path::new(&addr.0).parent().unwrap();
+        private_to_us(dir).unwrap();
+        // Shared /tmp itself is refused.
+        assert!(private_to_us(std::path::Path::new("/tmp")).is_err());
+    }
 }
