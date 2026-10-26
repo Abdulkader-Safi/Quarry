@@ -1,11 +1,11 @@
 ---
 id: "m0-viewport-spike-macos-2026-10-26"
-status: "todo"
+status: "in-progress"
 priority: "critical"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T09:57:15.000Z"
+modified: "2026-10-26T10:03:06.000Z"
 labels: ["m0", "render", "spike"]
 order: 3
 ---

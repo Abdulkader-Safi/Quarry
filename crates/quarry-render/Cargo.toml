@@ -7,3 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+wgpu.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+pollster.workspace = true
