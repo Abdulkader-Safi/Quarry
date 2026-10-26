@@ -24,7 +24,8 @@ const MAX_ENTRY_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TOTAL_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_IMAGE_SIDE: u32 = 16_384;
 const MESH_MAGIC: &[u8; 4] = b"QMSH";
-const MESH_VERSION: u32 = 1;
+/// 2 added seams after the faces; 1 is still read.
+const MESH_VERSION: u32 = 2;
 
 /// Renders a document to PNG bytes, or None when there is nothing to show.
 pub type Thumbnailer = fn(&Document) -> Option<Vec<u8>>;
@@ -298,6 +299,11 @@ fn encode_mesh(mesh: &Mesh) -> Vec<u8> {
             f32s(&mut b, &c.color.to_array());
         }
     }
+    u32s(&mut b, mesh.seams.len() as u32);
+    for (a, c) in &mesh.seams {
+        u32s(&mut b, *a);
+        u32s(&mut b, *c);
+    }
     b
 }
 
@@ -348,7 +354,7 @@ fn decode_mesh(bytes: &[u8]) -> Result<Mesh, String> {
         return Err("is not a Quarry mesh".into());
     }
     let version = r.u32()?;
-    if version != MESH_VERSION {
+    if !(1..=MESH_VERSION).contains(&version) {
         return Err(format!(
             "has mesh format {version}, this Quarry reads {MESH_VERSION}"
         ));
@@ -412,6 +418,16 @@ fn decode_mesh(bytes: &[u8]) -> Result<Mesh, String> {
             tile,
             hidden: hidden != 0,
         });
+    }
+    if version >= 2 {
+        let seams = r.count(8)?;
+        for _ in 0..seams {
+            let (a, b) = (r.u32()?, r.u32()?);
+            if a as usize >= positions || b as usize >= positions {
+                return Err("has a seam on a missing vertex".into());
+            }
+            mesh.seams.insert((a.min(b), a.max(b)));
+        }
     }
     if !r.0.is_empty() {
         return Err("has trailing data".into());

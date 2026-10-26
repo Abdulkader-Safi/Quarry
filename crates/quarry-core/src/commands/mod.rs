@@ -15,6 +15,7 @@ mod mesh;
 mod scene;
 mod select;
 mod tile;
+mod uv;
 
 pub(crate) fn register_all(r: &mut CommandRegistry) {
     tile::register(r);
@@ -22,6 +23,7 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     select::register(r);
     mesh::register(r);
     scene::register(r);
+    uv::register(r);
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
     r.register::<ProjectRecover>();
@@ -653,6 +655,7 @@ impl Command for MeshAddPrimitive {
             weights: Vec::new(),
             faces,
             mirror: None,
+            seams: Default::default(),
         }));
         let id = doc.objects.insert(object);
         let name = &doc.objects.get(id).expect("inserted").name;

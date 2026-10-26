@@ -434,6 +434,9 @@ pub struct Mesh {
     pub weights: Vec<Influences>,
     pub faces: Vec<Face>,
     pub mirror: Option<Axis>,
+    /// UV seams as vertex pairs, smaller index first (FR-UV-02).
+    #[serde(default)]
+    pub seams: std::collections::BTreeSet<(u32, u32)>,
 }
 
 impl Mesh {

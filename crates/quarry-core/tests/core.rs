@@ -85,6 +85,7 @@ fn full_document() -> Document {
             hidden: false,
         }],
         mirror: Some(Axis::X),
+        seams: Default::default(),
     }));
     let body = doc.objects.insert(body);
     let mut spawn = Object::new("spawn_player", ObjectKind::Marker);

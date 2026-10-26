@@ -93,6 +93,7 @@ fn scene() -> Document {
             hidden: false,
         }],
         mirror: Some(Axis::X),
+        seams: [(0, 1), (2, 3)].into_iter().collect(),
     }));
     let crate_ = doc.objects.insert(crate_);
     let mut spawn = Object::new("spawn_player", ObjectKind::Marker);
