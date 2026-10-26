@@ -55,6 +55,15 @@ jobs:
           toolchain: "1.97.1"
       - run: cargo run -p xtask -- validate-gltf
 
+  no-network:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.1"
+      - run: cargo run -p xtask -- no-network
+
   deny:
     runs-on: ubuntu-22.04
     steps:

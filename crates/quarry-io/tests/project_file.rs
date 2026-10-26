@@ -281,3 +281,60 @@ fn registry_saves_opens_and_tracks_dirty() {
     assert_eq!(err.code, ErrorCode::Io);
     assert!(err.message.contains("missing.quarry"));
 }
+
+#[test]
+fn linked_paths_are_saved_relative_and_reopen_absolute() {
+    use quarry_io::project::{absolute_from, relative_to};
+    let folder = std::path::Path::new(if cfg!(windows) {
+        r"C:\Users\safi\levels"
+    } else {
+        "/Users/safi/levels"
+    });
+    let inside = folder
+        .join("art")
+        .join("tiles.png")
+        .to_string_lossy()
+        .into_owned();
+    let beside = folder
+        .parent()
+        .unwrap()
+        .join("shared")
+        .join("robot.psd")
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(relative_to(folder, &inside), "art/tiles.png");
+    assert_eq!(relative_to(folder, &beside), "../shared/robot.psd");
+    for p in [&inside, &beside] {
+        assert_eq!(absolute_from(folder, &relative_to(folder, p)), *p);
+    }
+
+    // And in a real file: project.json holds no absolute path.
+    let dir = temp_dir("relative");
+    std::fs::create_dir_all(dir.join("art")).unwrap();
+    let mut doc = scene();
+    let art = dir
+        .join("art")
+        .join("floor.png")
+        .to_string_lossy()
+        .into_owned();
+    let id = doc.images.ids().next().unwrap();
+    doc.images.get_mut(id).unwrap().source_path = Some(art.clone());
+    let file = dir.join("p.quarry");
+    write_project(&doc, &file).unwrap();
+    let mut json = String::new();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(&file).unwrap()).unwrap();
+    zip.by_name("project.json")
+        .unwrap()
+        .read_to_string(&mut json)
+        .unwrap();
+    assert!(json.contains("\"art/floor.png\""), "saved relative");
+    assert!(
+        !json.contains(&*dir.to_string_lossy()),
+        "no absolute user path in the file"
+    );
+    let back = read_project(&file).unwrap();
+    assert_eq!(
+        back.images.get(id).unwrap().source_path.as_deref(),
+        Some(art.as_str())
+    );
+}

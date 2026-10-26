@@ -42,6 +42,22 @@ outlier of 88 ms at the moment the window came forward. Synthetic clicks skip th
 so real clicks add a few ms; clicking in the window prints `click_to_frame_ms` for a hand check.
 Both rows still need a run on the M1 Air 8 GB.
 
+## M9 measurements
+
+`cargo run --release -p xtask -- bench` (100,800 triangles: 450 spheres), MacBook Pro M2 Pro 16 GB,
+2026-10-27. The M1 Air 8 GB numbers are still to be taken.
+
+| Step | Time | Target (NFR-01) |
+|---|---|---|
+| Save .quarry (0.95 MB) | 66 ms | < 2 s |
+| Open .quarry | 13 ms | < 2 s |
+| Export .glb (6.1 MB) | 52 ms | < 2 s |
+
+No network (NFR-03): `cargo run -p xtask -- no-network`, also a CI job. `quarry` and `quarry-mcp`
+link no HTTP client, TLS or WebSocket crate, and Quarry's code opens no TCP or UDP socket. GPUI
+brings the `http` types crate for its client trait; no client is linked. `quarry-mcp` links tokio's
+`net` feature because rmcp's stdio transport enables it; it is not used.
+
 ## Decisions and deviations
 
 - 2026-10-26: Spec pinned to `docs/spec/` (build spec §4). `research/spec/` keeps the reference screenshots only.

@@ -130,7 +130,9 @@ pub fn write_project_with(
             path.display()
         ))
     };
-    let bytes = encode_with(doc, thumbnail).map_err(failed)?;
+    let folder = path.parent().unwrap_or(Path::new(""));
+    let bytes = encode_with(&with_link_paths(doc, |p| relative_to(folder, p)), thumbnail)
+        .map_err(failed)?;
     crate::settings::write_atomic(path, &bytes).map_err(|e| failed(e.to_string()))
 }
 
@@ -138,12 +140,74 @@ pub fn write_project_with(
 pub fn read_project(path: &Path) -> Result<Document, CommandError> {
     let bytes = std::fs::read(path)
         .map_err(|e| CommandError::io(format!("Could not open {}: {e}.", path.display())))?;
-    decode(&bytes).map_err(|why| {
-        CommandError::io(format!(
-            "Could not read {}: {why}. The file may be damaged or not a Quarry project.",
-            path.display()
-        ))
-    })
+    let folder = path.parent().unwrap_or(Path::new("")).to_path_buf();
+    decode(&bytes)
+        .map(|doc| with_link_paths(&doc, |p| absolute_from(&folder, p)))
+        .map_err(|why| {
+            CommandError::io(format!(
+                "Could not read {}: {why}. The file may be damaged or not a Quarry project.",
+                path.display()
+            ))
+        })
+}
+
+/// A copy of `doc` with every linked image path rewritten by `f`.
+fn with_link_paths(doc: &Document, f: impl Fn(&str) -> String) -> Document {
+    let mut doc = doc.clone();
+    let ids: Vec<_> = doc.images.ids().collect();
+    for id in ids {
+        let image = doc.images.get(id).expect("listed");
+        if let Some(source) = &image.source_path {
+            let rewritten = f(source);
+            if &rewritten != source {
+                doc.images.get_mut(id).expect("listed").source_path = Some(rewritten);
+            }
+        }
+    }
+    doc
+}
+
+/// `path` relative to `folder` with forward slashes ("art/tiles.png",
+/// "../shared/robot.psd"), so a project file never holds the user's home
+/// folder. Paths on another drive stay absolute.
+pub fn relative_to(folder: &Path, path: &str) -> String {
+    let target = Path::new(path);
+    if !target.is_absolute() || !folder.is_absolute() {
+        return path.to_string();
+    }
+    let a: Vec<_> = folder.components().collect();
+    let b: Vec<_> = target.components().collect();
+    let common = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    // A different root or drive (only the root in common): keep it absolute.
+    if common < 2 {
+        return path.to_string();
+    }
+    let mut parts: Vec<String> = vec!["..".into(); a.len() - common];
+    parts.extend(
+        b[common..]
+            .iter()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned()),
+    );
+    parts.join("/")
+}
+
+/// The reverse of [`relative_to`]: relative links resolve against the
+/// project's folder; absolute ones are left alone.
+pub fn absolute_from(folder: &Path, path: &str) -> String {
+    if Path::new(path).is_absolute() {
+        return path.to_string();
+    }
+    let mut out = folder.to_path_buf();
+    for part in path.split('/') {
+        match part {
+            ".." => {
+                out.pop();
+            }
+            "." | "" => {}
+            p => out.push(p),
+        }
+    }
+    out.to_string_lossy().into_owned()
 }
 
 pub fn encode(doc: &Document) -> Result<Vec<u8>, String> {
