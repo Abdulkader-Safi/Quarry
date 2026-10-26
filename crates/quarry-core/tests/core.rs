@@ -458,3 +458,45 @@ fn frame_centres_the_named_object() {
     let err = run(&mut r, "view.frame", json!({})).unwrap_err();
     assert_eq!(err.code, ErrorCode::NothingSelected);
 }
+
+#[test]
+fn every_primitive_is_one_undo_step_with_sane_uvs() {
+    let mut r = CommandRegistry::new();
+    for kind in ["box", "wedge", "cylinder", "cone", "sphere", "plane"] {
+        let before = r.history().entries().len();
+        run(
+            &mut r,
+            "mesh.add_primitive",
+            json!({ "kind": kind, "segments": 8 }),
+        )
+        .unwrap();
+        assert_eq!(r.history().entries().len(), before + 1, "{kind}");
+    }
+    for o in r.document().objects.iter() {
+        let mesh = o.mesh.as_deref().unwrap();
+        for f in &mesh.faces {
+            assert!(f.corners.len() == 3 || f.corners.len() == 4, "{}", o.name);
+            assert!(
+                f.corners
+                    .iter()
+                    .all(|c| c.uv.is_finite() && c.uv.x >= 0.0 && c.uv.x <= 16.0)
+            );
+        }
+    }
+    let cyl = r
+        .document()
+        .objects
+        .by_name("Cylinder")
+        .unwrap()
+        .mesh
+        .as_deref()
+        .unwrap();
+    assert_eq!(cyl.faces.iter().filter(|f| f.corners.len() == 4).count(), 8);
+    let err = run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "sphere", "segments": 2 }),
+    )
+    .unwrap_err();
+    assert_eq!(err.code, ErrorCode::OutOfBounds);
+}

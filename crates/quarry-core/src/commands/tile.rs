@@ -239,7 +239,7 @@ impl Command for TilePlane {
     }
 }
 
-fn frame(doc: &Document) -> ops::Frame {
+pub(super) fn plane_frame(doc: &Document) -> ops::Frame {
     let tool = doc.view.tile;
     let axis = match tool.axis {
         Axis::X => 0,
@@ -384,7 +384,7 @@ fn stamp_brush(
     let (b, image) = brush(doc)?;
     let (tile_px, padding, size) = (image.tile_px, image.padding, image.size);
     let (cols, _) = ops::grid(size[0], size[1], tile_px, padding);
-    let plane = frame(doc);
+    let plane = plane_frame(doc);
     let layout = ops::stamp(b.width, b.height, orient(&b));
     let mesh = mesh_of(doc, id);
     let mut placed = 0;
@@ -403,7 +403,7 @@ fn stamp_brush(
 }
 
 fn erase_cells(doc: &mut Document, id: Id<Object>, inverse: Mat4, cells: &[(i32, i32)]) -> usize {
-    let plane = frame(doc);
+    let plane = plane_frame(doc);
     let targets: Vec<[Vec3; 4]> = cells
         .iter()
         .map(|&(i, j)| plane.cell(i, j).map(|p| inverse.transform_point3(p)))

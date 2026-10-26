@@ -3,7 +3,7 @@
 use crate::command::{Command, CommandError, CommandRegistry, CommandResult, Context, ErrorCode};
 use crate::id::{Id, Keyed};
 use crate::model::{Corner, Document, Face, Filter, Mesh, Object, ObjectKind, ProjectSettings};
-use glam::{Vec2, Vec3, Vec4};
+use glam::{Vec3, Vec4};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
@@ -542,13 +542,20 @@ impl Command for SceneDelete {
 #[serde(rename_all = "snake_case")]
 pub enum Primitive {
     Box,
+    Wedge,
+    Cylinder,
+    Cone,
+    Sphere,
+    Plane,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MeshAddPrimitive {
-    /// Shape to add. Wedge, cylinder, cone, sphere and plane arrive in M3.
+    /// Shape to add.
     pub kind: Primitive,
+    /// Sides around for cylinder, cone and sphere, 3 to 128. Default 8 (sphere 12).
+    pub segments: Option<u32>,
     /// Size in metres [x, y, z]. Default [1, 1, 1].
     pub size: Option<[f32; 3]>,
     /// Centre in metres [x, y, z]. Default the 3D crosshair.
@@ -578,24 +585,35 @@ impl Command for MeshAddPrimitive {
         }
         let doc = cx.doc();
         let tile = doc.settings.tile_px as f32;
-        let (positions, quads) = match self.kind {
-            Primitive::Box => quarry_ops::primitive::cuboid(size),
+        use quarry_ops::primitive as shapes;
+        let segments = self.segments.unwrap_or(match self.kind {
+            Primitive::Sphere => 12,
+            _ => 8,
+        });
+        if !(3..=128).contains(&segments) {
+            return Err(CommandError::new(
+                ErrorCode::OutOfBounds,
+                "segments must be between 3 and 128.",
+            ));
+        }
+        let (shape, base) = match self.kind {
+            Primitive::Box => (shapes::cube(size), "Box"),
+            Primitive::Wedge => (shapes::wedge(size), "Wedge"),
+            Primitive::Cylinder => (shapes::cylinder(size, segments), "Cylinder"),
+            Primitive::Cone => (shapes::cone(size, segments), "Cone"),
+            Primitive::Sphere => (shapes::sphere(size, segments), "Sphere"),
+            Primitive::Plane => (shapes::plane(size), "Plane"),
         };
-        let uvs = [
-            Vec2::new(0.0, tile),
-            Vec2::new(tile, tile),
-            Vec2::new(tile, 0.0),
-            Vec2::new(0.0, 0.0),
-        ];
-        let faces = quads
+        let faces = shape
+            .faces
             .into_iter()
-            .map(|q| Face {
-                corners: q
-                    .iter()
+            .map(|(corners, uvs)| Face {
+                corners: corners
+                    .into_iter()
                     .zip(uvs)
-                    .map(|(&vertex, uv)| Corner {
+                    .map(|(vertex, uv)| Corner {
                         vertex,
-                        uv,
+                        uv: uv * tile,
                         color: Vec4::ONE,
                     })
                     .collect(),
@@ -605,6 +623,7 @@ impl Command for MeshAddPrimitive {
                 hidden: false,
             })
             .collect();
+        let positions = shape.positions;
 
         let name = match self.name {
             Some(name) if doc.objects.by_name(&name).is_some() => {
@@ -614,10 +633,13 @@ impl Command for MeshAddPrimitive {
                 ));
             }
             Some(name) => name,
-            None => doc.objects.unique_name("Box"),
+            None => doc.objects.unique_name(base),
         };
         let mut object = Object::new(name, ObjectKind::Mesh);
         object.transform.translation = position;
+        // Stand the shape on the active placement plane (the floor by default).
+        let normal = tile::plane_frame(doc).n;
+        object.transform.rotation = glam::Quat::from_rotation_arc(Vec3::Y, normal);
         object.mesh = Some(Arc::new(Mesh {
             positions,
             weights: Vec::new(),

@@ -23,3 +23,8 @@ FR-ART-06.
 - [ ] Drop a PNG: the dialog asks tileset or texture and the import completes.
 - [ ] Drop a PSD: same flow, flattened.
 - [ ] Dropping an unsupported file gives a plain error and changes nothing.
+
+## Backend done 2026-10-26
+
+- `art.import(path, as: tileset|texture, tile_px?, padding?)` is what a drop runs; PNG and flattened PSD; unsupported files return an io error and change nothing.
+- Left: the native file drop and the tileset/texture dialog (app shell).

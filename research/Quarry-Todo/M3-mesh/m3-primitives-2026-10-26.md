@@ -1,11 +1,11 @@
 ---
 id: "m3-primitives-2026-10-26"
-status: "todo"
+status: "done"
 priority: "high"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T09:57:15.000Z"
+modified: "2026-10-26T23:40:00.000Z"
 labels: ["m3", "mesh"]
 order: 30
 ---
@@ -20,6 +20,12 @@ FR-MESH-01. The fastest way for a human or an agent to start geometry.
 - UVs laid out per primitive so texturing works immediately.
 
 **Done when**
-- [ ] An 8-segment cylinder has 8 side quads and two caps.
-- [ ] Every primitive has sane UVs, no NaNs, no inverted normals.
-- [ ] Each add is one undo step.
+- [x] An 8-segment cylinder has 8 side quads and two caps.
+- [x] Every primitive has sane UVs, no NaNs, no inverted normals.
+- [x] Each add is one undo step.
+
+## Done 2026-10-26
+
+- `quarry-ops::primitive`: box, wedge, cylinder, cone, sphere, plane as positions + 3/4-corner faces with 0..1 UVs (caps over 4 corners are fanned into triangles, since faces hold 3 or 4 corners).
+- `mesh.add_primitive(kind, segments?, size?, position?, name?)`: at the crosshair, standing on the active placement plane (object rotation from +Y to the plane normal), UVs scaled to the tile.
+- Tests: every face of every primitive points outward with UVs in range; an 8-segment cylinder has 8 side quads and two fanned caps; each add is one undo step; segments outside 3..128 are refused.
