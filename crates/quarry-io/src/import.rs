@@ -142,6 +142,7 @@ pub fn import(path: &Path) -> Result<Document, CommandError> {
             name: doc.skeletons.unique_name(&name),
             bones,
             ik_chains: Vec::new(),
+            pose: Vec::new(),
         });
         skeleton_of_skin.insert(
             skin.index(),

@@ -63,6 +63,7 @@ fn scene() -> Document {
             target: Vec3::X,
             pole: Vec3::Z,
         }],
+        pose: Vec::new(),
     });
 
     let mut crate_ = Object::new("crate", ObjectKind::Mesh);

@@ -2,4 +2,5 @@
 
 pub mod paint;
 pub mod primitive;
+pub mod rig;
 pub mod tile;

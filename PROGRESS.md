@@ -14,7 +14,7 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 | M3 | Mesh editing, UVs, scene | in progress | all commands done headless (primitives, selection, edits, mirror, scene, UV); UI waits for the design |
 | M4 | Painting | in progress | paint commands, 3D strokes and pressure sizing done headless; UI waits for the design |
 | M5 | glTF export and import | in progress | export and import done headless (goldens validate 0/0/0); Cairn, Blender and Kenney checks need Safi |
-| M6 | Rigging | not started | |
+| M6 | Rigging | in progress | bones, auto and rigid binding, weights, IK, mirror, pose done headless; skinned export next |
 | M7 | Animation | not started | |
 | M8 | Agent experience | not started | |
 | M9 | Hardening and release | not started | |

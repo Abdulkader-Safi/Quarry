@@ -53,6 +53,7 @@ fn full_document() -> Document {
             target: Vec3::new(0.2, 0.0, 0.1),
             pole: Vec3::Z,
         }],
+        pose: Vec::new(),
     });
     let mut body = Object::new("body", ObjectKind::Mesh);
     body.transform.rotation = Quat::from_rotation_y(0.7);

@@ -14,6 +14,7 @@ mod art;
 mod export;
 mod mesh;
 mod paint;
+mod rig;
 mod scene;
 mod select;
 mod tile;
@@ -28,6 +29,7 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     uv::register(r);
     export::register(r);
     paint::register(r);
+    rig::register(r);
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
     r.register::<ProjectRecover>();

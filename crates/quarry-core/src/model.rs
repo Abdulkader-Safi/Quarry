@@ -605,8 +605,105 @@ pub struct Skeleton {
     /// At most 128.
     pub bones: Vec<Bone>,
     pub ik_chains: Vec<IkChain>,
+    /// Current pose per bone, relative to rest (FR-RIG-08). Missing means rest.
+    #[serde(default)]
+    pub pose: Vec<BonePose>,
 }
 keyed!(Skeleton, 's');
+
+/// A bone's offset from its rest pose, in the bone's own frame.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BonePose {
+    pub translation: Vec3,
+    pub rotation: Quat,
+    pub scale: Vec3,
+}
+
+impl Default for BonePose {
+    fn default() -> Self {
+        Self {
+            translation: Vec3::ZERO,
+            rotation: Quat::IDENTITY,
+            scale: Vec3::ONE,
+        }
+    }
+}
+
+impl BonePose {
+    pub fn matrix(&self) -> glam::Mat4 {
+        glam::Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation)
+    }
+}
+
+impl Skeleton {
+    pub fn index(&self, name: &str) -> Option<u16> {
+        self.bones
+            .iter()
+            .position(|b| b.name == name)
+            .map(|i| i as u16)
+    }
+
+    /// Rest matrices in skeleton space.
+    pub fn rest_world(&self) -> Vec<glam::Mat4> {
+        self.bones
+            .iter()
+            .map(|b| quarry_ops::rig::rest_matrix(b.head, b.tail, b.roll))
+            .collect()
+    }
+
+    /// Each bone's rest matrix relative to its parent's.
+    pub fn rest_local(&self) -> Vec<glam::Mat4> {
+        let world = self.rest_world();
+        self.bones
+            .iter()
+            .enumerate()
+            .map(|(i, b)| match b.parent {
+                Some(p) => world[p as usize].inverse() * world[i],
+                None => world[i],
+            })
+            .collect()
+    }
+
+    pub fn pose_of(&self, bone: usize) -> BonePose {
+        self.pose.get(bone).copied().unwrap_or_default()
+    }
+
+    /// Posed matrices in skeleton space (forward kinematics).
+    pub fn pose_world(&self) -> Vec<glam::Mat4> {
+        let local = self.rest_local();
+        let mut world: Vec<Option<glam::Mat4>> = vec![None; self.bones.len()];
+        fn solve(
+            s: &Skeleton,
+            i: usize,
+            local: &[glam::Mat4],
+            world: &mut [Option<glam::Mat4>],
+            depth: u32,
+        ) -> glam::Mat4 {
+            if let Some(m) = world[i] {
+                return m;
+            }
+            let own = local[i] * s.pose_of(i).matrix();
+            let m = match s.bones[i].parent {
+                Some(p) if depth < 128 => solve(s, p as usize, local, world, depth + 1) * own,
+                _ => own,
+            };
+            world[i] = Some(m);
+            m
+        }
+        (0..self.bones.len())
+            .map(|i| solve(self, i, &local, &mut world, 0))
+            .collect()
+    }
+
+    /// Skinning matrices: posed world times inverse rest world.
+    pub fn skinning(&self) -> Vec<glam::Mat4> {
+        self.pose_world()
+            .iter()
+            .zip(self.rest_world())
+            .map(|(pose, rest)| *pose * rest.inverse())
+            .collect()
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Bone {
