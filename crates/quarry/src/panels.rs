@@ -2720,8 +2720,9 @@ impl Quarry {
     /// drag, and presets. Playback and export follow it.
     fn curve_row(&mut self, cx: &mut Context<Self>) -> Option<Div> {
         let p = t();
-        let (_, _, _, handles, has_next) = self.selected_key_info()?;
-        if !has_next {
+        let key = self.selected_key_info()?;
+        let handles = key.handles;
+        if !key.has_next {
             return Some(div().px(px(12.0)).py(px(8.0)).child(text(
                 "Pick a key with another after it to shape the motion between them.",
                 Type::BodyS,

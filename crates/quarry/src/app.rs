@@ -145,6 +145,16 @@ pub enum Field {
     BoneTail(usize),
 }
 
+/// The selected timeline key: its bone, channel, time, curve handles (when
+/// it has a curve) and whether a key follows it (a segment to shape).
+pub struct PickedKey {
+    pub bone: String,
+    pub channel: &'static str,
+    pub time: f32,
+    pub handles: Option<[glam::Vec2; 2]>,
+    pub has_next: bool,
+}
+
 /// A timeline key being dragged; one `anim.key_move` on release.
 pub struct KeyDrag {
     pub row: usize,
@@ -1377,11 +1387,8 @@ impl Quarry {
         );
     }
 
-    /// The selected timeline key: bone, channel name, time, its handles (if
-    /// it has a curve) and whether a key follows it (a segment to shape).
-    pub fn selected_key_info(
-        &self,
-    ) -> Option<(String, &'static str, f32, Option<[glam::Vec2; 2]>, bool)> {
+    /// The selected timeline key, for the curve row.
+    pub fn selected_key_info(&self) -> Option<PickedKey> {
         use quarry_core::model::TrackTarget;
         let doc = self.reg.document();
         let clip = doc.clips.get(doc.view.anim.clip?)?;
@@ -1397,22 +1404,22 @@ impl Quarry {
         let handles = (key.interp == quarry_core::model::Interp::Bezier)
             .then_some(key.handles)
             .flatten();
-        Some((
-            name,
-            crate::panels::channel_arg(track.channel),
-            key.time,
+        Some(PickedKey {
+            bone: name,
+            channel: crate::panels::channel_arg(track.channel),
+            time: key.time,
             handles,
-            k + 1 < track.keys.len(),
-        ))
+            has_next: k + 1 < track.keys.len(),
+        })
     }
 
     /// Give the selected key's segment this curve (`anim.key_ease`).
     pub fn set_key_curve(&mut self, handles: [glam::Vec2; 2], cx: &mut Context<Self>) {
-        if let Some((bone, channel, time, _, true)) = self.selected_key_info() {
+        if let Some(k) = self.selected_key_info().filter(|k| k.has_next) {
             let h = [[handles[0].x, handles[0].y], [handles[1].x, handles[1].y]];
             self.run(
                 "anim.key_ease",
-                json!({ "bone": bone, "channel": channel, "time": time, "handles": h }),
+                json!({ "bone": k.bone, "channel": k.channel, "time": k.time, "handles": h }),
                 cx,
             );
         }
