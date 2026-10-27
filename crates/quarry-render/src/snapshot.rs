@@ -35,6 +35,9 @@ pub struct Snapshot {
     /// World-space bounds of everything drawn.
     pub bounds: Option<(Vec3, Vec3)>,
     pub grid_step: f32,
+    /// Line pairs drawn over the meshes: posed bones, and the 3D crosshair in
+    /// the live view.
+    pub overlay: Vec<DocVertex>,
 }
 
 impl Snapshot {
@@ -110,11 +113,43 @@ pub fn snapshot_with(doc: &Document, highlight: bool) -> Snapshot {
             filter: i.filter,
         })
         .collect();
+    let mut overlay = Vec::new();
+    let mut line = |a: Vec3, b: Vec3, color: [f32; 4]| {
+        for p in [a, b] {
+            overlay.push(DocVertex {
+                position: p.into(),
+                normal: [0.0, 1.0, 0.0],
+                uv: [0.0, 0.0],
+                color,
+            });
+        }
+    };
+    if doc.view.display.bones {
+        for skeleton in doc.skeletons.iter() {
+            for (bone, world) in skeleton.bones.iter().zip(skeleton.pose_world()) {
+                let length = bone.head.distance(bone.tail);
+                let (head, tail) = (
+                    world.transform_point3(Vec3::ZERO),
+                    world.transform_point3(Vec3::Y * length),
+                );
+                line(head, tail, [0.83, 0.85, 0.88, 1.0]);
+            }
+        }
+    }
+    if highlight {
+        // The crosshair: short X, Y and Z ticks in the axis colours.
+        let c = doc.view.cursor;
+        let r = 0.3;
+        line(c - Vec3::X * r, c + Vec3::X * r, [1.0, 0.07, 0.11, 1.0]);
+        line(c - Vec3::Y * r, c + Vec3::Y * r, [0.2, 0.72, 0.07, 1.0]);
+        line(c - Vec3::Z * r, c + Vec3::Z * r, [0.07, 0.26, 1.0, 1.0]);
+    }
     Snapshot {
         batches,
         images,
         bounds,
         grid_step: doc.settings.grid_step,
+        overlay,
     }
 }
 

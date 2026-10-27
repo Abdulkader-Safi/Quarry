@@ -26,6 +26,7 @@ pub struct DocumentRenderer {
     faces_culled: wgpu::RenderPipeline,
     faces_both: wgpu::RenderPipeline,
     lines: wgpu::RenderPipeline,
+    overlay: wgpu::RenderPipeline,
     frame: wgpu::Buffer,
     frame_group: wgpu::BindGroup,
     texture_layout: wgpu::BindGroupLayout,
@@ -95,7 +96,7 @@ impl DocumentRenderer {
             immediate_size: 0,
         });
         let attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x4];
-        let pipeline = |fragment: &str, topology, cull_mode| {
+        let pipeline = |fragment: &str, topology, cull_mode, on_top: bool| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(fragment),
                 layout: Some(&layout),
@@ -127,8 +128,12 @@ impl DocumentRenderer {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: DEPTH,
-                    depth_write_enabled: Some(true),
-                    depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                    depth_write_enabled: Some(!on_top),
+                    depth_compare: Some(if on_top {
+                        wgpu::CompareFunction::Always
+                    } else {
+                        wgpu::CompareFunction::LessEqual
+                    }),
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),
@@ -141,9 +146,12 @@ impl DocumentRenderer {
             "fs_lit",
             wgpu::PrimitiveTopology::TriangleList,
             Some(wgpu::Face::Back),
+            false,
         );
-        let faces_both = pipeline("fs_lit", wgpu::PrimitiveTopology::TriangleList, None);
-        let lines = pipeline("fs_flat", wgpu::PrimitiveTopology::LineList, None);
+        let faces_both = pipeline("fs_lit", wgpu::PrimitiveTopology::TriangleList, None, false);
+        let lines = pipeline("fs_flat", wgpu::PrimitiveTopology::LineList, None, false);
+        // Bones and the crosshair draw over the meshes, like the design.
+        let overlay = pipeline("fs_flat", wgpu::PrimitiveTopology::LineList, None, true);
 
         let sampler = |filter| {
             device.create_sampler(&wgpu::SamplerDescriptor {
@@ -172,6 +180,7 @@ impl DocumentRenderer {
             faces_culled,
             faces_both,
             lines,
+            overlay,
             frame,
             frame_group,
             texture_layout,
@@ -279,6 +288,16 @@ impl DocumentRenderer {
                 });
             (buffer, lines.len() as u32)
         });
+        let overlay = (!snapshot.overlay.is_empty()).then(|| {
+            let buffer = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("overlay"),
+                    contents: bytemuck::cast_slice(&snapshot.overlay),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+            (buffer, snapshot.overlay.len() as u32)
+        });
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
@@ -324,6 +343,12 @@ impl DocumentRenderer {
             }
             if let Some((buffer, count)) = &grid {
                 pass.set_pipeline(&self.lines);
+                pass.set_bind_group(1, &self.white, &[]);
+                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.draw(0..*count, 0..1);
+            }
+            if let Some((buffer, count)) = &overlay {
+                pass.set_pipeline(&self.overlay);
                 pass.set_bind_group(1, &self.white, &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..*count, 0..1);
