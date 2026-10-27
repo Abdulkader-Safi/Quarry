@@ -196,6 +196,8 @@ pub struct Quarry {
     pub interp: &'static str,
     pub field_drag: Option<FieldDrag>,
     tile_stroke: Option<Vec<[i32; 2]>>,
+    /// Box select in the view: start and current corner, window coordinates.
+    pub box_drag: Option<(Point<Pixels>, Point<Pixels>, bool)>,
     paint_stroke: Option<Vec<[f32; 3]>>,
     pub export_selected: bool,
     pub export_scale: f32,
@@ -321,6 +323,7 @@ impl Quarry {
             interp: "linear",
             field_drag: None,
             tile_stroke: None,
+            box_drag: None,
             paint_stroke: None,
             export_selected: false,
             export_scale: 1.0,
@@ -964,6 +967,9 @@ impl Quarry {
                 }
             }
             Tool::Weights | Tool::WeightFill => self.paint_weights(origin, dir, cx),
+            Tool::BoxSelect => {
+                self.box_drag = Some((e.position, e.position, e.modifiers.shift));
+            }
             _ => self.select_at(origin, dir, e.modifiers.shift, cx),
         }
     }
@@ -976,6 +982,11 @@ impl Quarry {
                 last: e.position,
                 ..drag
             });
+            cx.notify();
+            return;
+        }
+        if let Some((a, _, add)) = self.box_drag {
+            self.box_drag = Some((a, e.position, add));
             cx.notify();
             return;
         }
@@ -1010,6 +1021,28 @@ impl Quarry {
                 self.run("tile.fill_rect", json!({ "a": a, "b": b }), cx);
             } else if self.tool != Tool::EraseTile {
                 self.run("tile.place", json!({ "cells": cells }), cx);
+            }
+        }
+        if let Some((a, b, add)) = self.box_drag.take() {
+            let r = self.view.bounds.get();
+            let frac = |p: Point<Pixels>| {
+                (
+                    (f32::from(p.x - r.origin.x) / f32::from(r.size.width)).clamp(0.0, 1.0),
+                    (f32::from(p.y - r.origin.y) / f32::from(r.size.height)).clamp(0.0, 1.0),
+                )
+            };
+            let ((x0, y0), (x1, y1)) = (frac(a), frac(b));
+            let rect = [x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)];
+            if rect[2] - rect[0] > 0.002 && rect[3] - rect[1] > 0.002 {
+                let aspect = self.view.aspect();
+                self.run(
+                    "select.box",
+                    json!({ "rect": rect, "aspect": aspect, "add": add }),
+                    cx,
+                );
+            } else {
+                let (origin, dir) = self.view.ray(a);
+                self.select_at(origin, dir, add, cx);
             }
         }
         if let Some(points) = self.paint_stroke.take() {
@@ -1157,7 +1190,7 @@ impl Quarry {
         if let Some(d) = &mut self.field_drag {
             d.delta = f32::from(e.position.x) - d.start_x;
             cx.notify();
-        } else if self.view.drag.is_some() {
+        } else if self.view.drag.is_some() || self.box_drag.is_some() {
             self.view_mouse_move(e, cx);
         }
     }
@@ -1166,7 +1199,11 @@ impl Quarry {
         if let Some(d) = self.field_drag.take() {
             self.apply_field(d.field, d.delta, cx);
         }
-        if self.view.drag.is_some() || self.tile_stroke.is_some() || self.paint_stroke.is_some() {
+        if self.view.drag.is_some()
+            || self.tile_stroke.is_some()
+            || self.paint_stroke.is_some()
+            || self.box_drag.is_some()
+        {
             self.view_mouse_up(cx);
         }
     }

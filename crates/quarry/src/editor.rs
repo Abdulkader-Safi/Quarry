@@ -457,6 +457,25 @@ impl Quarry {
             }
             _ => None,
         };
+        if let Some((a, b, _)) = self.box_drag {
+            let o = self.view.bounds.get().origin;
+            let (x0, y0) = (a.x.min(b.x) - o.x, a.y.min(b.y) - o.y);
+            let (w, h) = ((a.x - b.x).abs(), (a.y - b.y).abs());
+            v = v.child(
+                div()
+                    .absolute()
+                    .left(x0)
+                    .top(y0)
+                    .w(w)
+                    .h(h)
+                    .border_1()
+                    .border_color(p.accent)
+                    .bg(Rgba {
+                        a: 0.12,
+                        ..p.accent
+                    }),
+            );
+        }
         // While the agent runs, its banner takes the top edge (design 08).
         if !agent {
             let toolbar = self.viewport_toolbar(cx);
