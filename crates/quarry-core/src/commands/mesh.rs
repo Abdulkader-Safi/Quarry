@@ -29,7 +29,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
 }
 
 /// The edited object's id, world matrix and a mutable copy of its mesh.
-fn editing(doc: &mut Document) -> Result<(Id<Object>, Mat4, &mut Mesh), CommandError> {
+pub(super) fn editing(doc: &mut Document) -> Result<(Id<Object>, Mat4, &mut Mesh), CommandError> {
     let (o, _) = edit_mesh(doc)?;
     let (id, world) = (o.id, doc.world_matrix(o));
     let object = doc.objects.get_mut(id).expect("edited object exists");
@@ -37,7 +37,7 @@ fn editing(doc: &mut Document) -> Result<(Id<Object>, Mat4, &mut Mesh), CommandE
     Ok((id, world, mesh))
 }
 
-fn nothing(what: &str) -> CommandError {
+pub(super) fn nothing(what: &str) -> CommandError {
     CommandError::new(
         ErrorCode::NothingSelected,
         format!("No {what} selected. Call select first."),
@@ -71,7 +71,7 @@ fn face_normal(mesh: &Mesh, face: &Face) -> Vec3 {
     n.normalize_or_zero()
 }
 
-fn add_vertex(mesh: &mut Mesh, p: Vec3, like: u32) -> u32 {
+pub(super) fn add_vertex(mesh: &mut Mesh, p: Vec3, like: u32) -> u32 {
     mesh.positions.push(p);
     if !mesh.weights.is_empty() {
         let w = mesh.weights.get(like as usize).copied().unwrap_or_default();

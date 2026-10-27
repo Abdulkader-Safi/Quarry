@@ -299,3 +299,109 @@ fn edits_need_a_selection_and_say_so() {
     assert_eq!(err.code, ErrorCode::NothingSelected);
     assert_eq!(err.message, "No faces selected. Call select first.");
 }
+
+fn all_faces(r: &mut CommandRegistry) {
+    run(r, "select.mode", json!({ "mode": "face" }));
+    let n = mesh(r.document(), "M").faces.len() as u32;
+    run(
+        r,
+        "select.by_ids",
+        json!({ "faces": (0..n).collect::<Vec<_>>() }),
+    );
+}
+
+#[test]
+fn inset_makes_a_ring_of_quads_and_keeps_the_inner_face_selected() {
+    let mut r = editing("box");
+    run(&mut r, "select.mode", json!({ "mode": "face" }));
+    run(&mut r, "select.by_ids", json!({ "faces": [0] }));
+    let reply = run(&mut r, "mesh.inset", json!({ "amount": 0.5 }));
+    assert_eq!(reply["ring_faces"], 4);
+    let m = mesh(r.document(), "M");
+    assert_eq!((m.faces.len(), m.positions.len()), (10, 12));
+    assert!(m.faces.iter().all(|f| f.corners.len() == 4));
+    assert_eq!(r.document().selection.faces, BTreeSet::from([0]));
+}
+
+#[test]
+fn subdividing_a_box_gives_24_quads_and_the_middle_loop_has_8_edges() {
+    let mut r = editing("box");
+    all_faces(&mut r);
+    let before: Vec<Vec3> = mesh(r.document(), "M").positions.clone();
+    run(&mut r, "mesh.subdivide", json!({}));
+    let m = mesh(r.document(), "M");
+    assert_eq!(m.faces.len(), 24);
+    assert_eq!(m.positions.len(), 8 + 12 + 6, "edge midpoints are shared");
+    assert!(m.faces.iter().all(|f| f.corners.len() == 4));
+    // The middle loop: from the centre of the +X face to the midpoint above it.
+    let (lo, hi) = before
+        .iter()
+        .fold((Vec3::MAX, Vec3::MIN), |(a, b), p| (a.min(*p), b.max(*p)));
+    let c = (lo + hi) / 2.0;
+    let find = |p: Vec3| {
+        m.positions
+            .iter()
+            .position(|q| q.distance(p) < 1e-4)
+            .unwrap() as u32
+    };
+    let a = find(Vec3::new(hi.x, c.y, c.z));
+    let b = find(Vec3::new(hi.x, hi.y, c.z));
+    let reply = run(&mut r, "select.loop", json!({ "edge": [a, b] }));
+    assert_eq!(reply["edges"], 8);
+}
+
+#[test]
+fn bevelling_a_box_edge_adds_a_strip_and_keeps_faces_valid() {
+    let mut r = editing("box");
+    let m = mesh(r.document(), "M");
+    let f = &m.faces[0];
+    let (a, b) = (f.corners[0].vertex, f.corners[1].vertex);
+    run(
+        &mut r,
+        "mesh.bevel",
+        json!({ "edge": [a, b], "width": 0.1 }),
+    );
+    let m = mesh(r.document(), "M");
+    assert!(m.faces.iter().all(|f| (3..=4).contains(&f.corners.len())));
+    // 6 faces + the strip + one triangle per end cap.
+    assert_eq!(m.faces.len(), 9);
+    assert_eq!(m.positions.len(), 10, "two old corners became four");
+    // Closed: every edge has exactly two faces.
+    let mut count = std::collections::BTreeMap::new();
+    for f in &m.faces {
+        let n = f.corners.len();
+        for i in 0..n {
+            let (x, y) = (f.corners[i].vertex, f.corners[(i + 1) % n].vertex);
+            *count.entry((x.min(y), x.max(y))).or_insert(0) += 1;
+        }
+    }
+    assert!(count.values().all(|c| *c == 2), "still watertight");
+    let mut directed = BTreeSet::new();
+    for f in &m.faces {
+        let n = f.corners.len();
+        for i in 0..n {
+            let e = (f.corners[i].vertex, f.corners[(i + 1) % n].vertex);
+            assert!(
+                directed.insert(e),
+                "edge {e:?} runs the same way twice: winding broke"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_knife_cut_across_a_quad_splits_it_and_its_neighbours() {
+    let mut r = editing("box");
+    let m = mesh(r.document(), "M");
+    let c: Vec<u32> = m.faces[0].corners.iter().map(|c| c.vertex).collect();
+    run(
+        &mut r,
+        "mesh.knife",
+        json!({ "from": { "edge": [c[0], c[1]], "at": 0.5 }, "to": { "edge": [c[2], c[3]], "at": 0.5 } }),
+    );
+    let m = mesh(r.document(), "M");
+    assert!(m.faces.iter().all(|f| (3..=4).contains(&f.corners.len())));
+    // Face 0 in two quads; each neighbour on a cut edge becomes quad + triangle.
+    assert_eq!(m.faces.len(), 6 + 1 + 2);
+    assert_eq!(m.positions.len(), 10);
+}

@@ -14,6 +14,7 @@ mod anim;
 mod art;
 mod export;
 mod mesh;
+mod meshtools;
 mod paint;
 mod rig;
 mod scene;
@@ -26,6 +27,7 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     art::register(r);
     select::register(r);
     mesh::register(r);
+    meshtools::register(r);
     scene::register(r);
     uv::register(r);
     export::register(r);
