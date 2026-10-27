@@ -281,6 +281,9 @@ impl Render for app::Quarry {
             .text_color(p.text_primary)
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, e, window, cx| this.key_down(e, window, cx)))
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
+                this.files_dropped(paths.paths(), cx)
+            }))
             .on_mouse_move(cx.listener(|this, e, _, cx| this.root_mouse_move(e, cx)))
             .on_mouse_up(
                 MouseButton::Left,

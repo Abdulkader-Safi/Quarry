@@ -68,6 +68,9 @@ pub struct ArtImport {
     /// Tilesets only. Default 0.
     pub padding: Option<u32>,
     pub name: Option<String>,
+    /// Textures only: also put it on the selected faces of the edited mesh
+    /// (all its faces when none are selected). Default false.
+    pub assign: Option<bool>,
 }
 
 impl Command for ArtImport {
@@ -88,8 +91,13 @@ impl Command for ArtImport {
             tile_px,
             self.padding.unwrap_or(0),
         )?;
+        let faces = if self.assign == Some(true) && role == ImageRole::Texture {
+            super::paint::put_on_faces(cx.doc(), id)?
+        } else {
+            0
+        };
         let image = cx.state.doc.images.get(id).expect("inserted");
-        Ok(json!({ "id": id, "name": image.name, "size": image.size }))
+        Ok(json!({ "id": id, "name": image.name, "size": image.size, "faces": faces }))
     }
 }
 

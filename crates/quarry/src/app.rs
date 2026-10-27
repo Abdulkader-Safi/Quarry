@@ -52,6 +52,8 @@ pub enum Overlay {
     Settings,
     Connect,
     Basics,
+    /// Images dropped on the window, waiting for "tileset or texture".
+    Import,
 }
 
 /// Everything the tool rails offer. What a click in the view does depends on it.
@@ -202,6 +204,11 @@ pub struct Quarry {
     pub shortcut_filter: Entity<InputState>,
     /// The keymap action waiting for its new key in Settings.
     pub rebinding: Option<&'static str>,
+    /// Image files dropped on the window, imported when the dialog confirms.
+    pub dropped: Vec<PathBuf>,
+    pub drop_texture: bool,
+    pub drop_tile_px: u32,
+    pub drop_padding: u32,
     pub rebind_note: Option<String>,
     pub export_path: Entity<InputState>,
     pub agent_log: Vec<LogEntry>,
@@ -394,6 +401,10 @@ impl Quarry {
             timeline_bounds: Default::default(),
             rig_note: None,
             rebinding: None,
+            dropped: Vec::new(),
+            drop_texture: false,
+            drop_tile_px: 16,
+            drop_padding: 0,
             rebind_note: None,
         };
         app.sync_component_theme(cx);
@@ -457,6 +468,10 @@ impl Quarry {
                 }
                 ("light", _) => self.set_theme(true, cx),
                 ("sample", v) => self.open_sample(v, cx),
+                ("drop", v) => {
+                    let paths: Vec<PathBuf> = v.split(',').map(PathBuf::from).collect();
+                    self.files_dropped(&paths, cx)
+                }
                 ("bone", v) => self.selected_bone = v.parse().ok(),
                 ("run", cmd) => {
                     let _ = self.reg.execute(cmd, json!({}), Source::Human);
@@ -818,6 +833,87 @@ impl Quarry {
     }
 
     /// The bundled sample robot (13 bones, two clips) or the CC0 tileset.
+    /// Files dropped on the window: a .quarry opens, PNG and PSD go through
+    /// the import dialog, anything else is named and left alone.
+    pub fn files_dropped(&mut self, paths: &[PathBuf], cx: &mut Context<Self>) {
+        let ext = |p: &PathBuf| {
+            p.extension()
+                .map(|e| e.to_string_lossy().to_lowercase())
+                .unwrap_or_default()
+        };
+        if let Some(project) = paths.iter().find(|p| ext(p) == "quarry") {
+            self.open(project.clone(), cx);
+            return;
+        }
+        let (images, other): (Vec<_>, Vec<_>) = paths
+            .iter()
+            .cloned()
+            .partition(|p| matches!(ext(p).as_str(), "png" | "psd"));
+        if !other.is_empty() {
+            let names: Vec<String> = other
+                .iter()
+                .filter_map(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .collect();
+            self.flash(format!(
+                "Quarry imports PNG and PSD images. Left out: {}.",
+                names.join(", ")
+            ));
+        }
+        if images.is_empty() {
+            return;
+        }
+        if self.screen != Screen::Editor {
+            self.flash("Open or start a project first, then drop the image on it.");
+            return;
+        }
+        let doc = self.reg.document();
+        self.drop_tile_px = doc.settings.tile_px;
+        self.drop_padding = 0;
+        self.drop_texture = doc.selection.object.is_some() || !doc.selection.objects.is_empty();
+        self.dropped = images;
+        self.overlay = Overlay::Import;
+        cx.notify();
+    }
+
+    /// Import the dropped files in order, each as its own image.
+    pub fn import_dropped(&mut self, cx: &mut Context<Self>) {
+        let files = std::mem::take(&mut self.dropped);
+        self.overlay = Overlay::None;
+        let doc = self.reg.document();
+        let assign = doc.selection.object.is_some() || !doc.selection.objects.is_empty();
+        let mut done = 0;
+        for path in &files {
+            let args = if self.drop_texture {
+                json!({ "path": path, "as": "texture", "assign": assign })
+            } else {
+                json!({
+                    "path": path, "as": "tileset",
+                    "tile_px": self.drop_tile_px, "padding": self.drop_padding,
+                })
+            };
+            if self.run("art.import", args, cx).is_none() {
+                break;
+            }
+            done += 1;
+        }
+        if done == files.len() {
+            self.flash(format!(
+                "Imported {done} image{}",
+                if done == 1 { "" } else { "s" }
+            ));
+            self.set_side(
+                if self.drop_texture {
+                    SideTab::Paint
+                } else {
+                    SideTab::Tileset
+                },
+                cx,
+            );
+        }
+        cx.notify();
+    }
+
     pub fn open_sample(&mut self, which: &str, cx: &mut Context<Self>) {
         let Some(dirs) = self.dirs.clone() else {
             self.flash("No app data folder to unpack the sample into.");

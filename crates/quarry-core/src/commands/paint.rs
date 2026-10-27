@@ -61,6 +61,59 @@ fn with_canvas<R>(doc: &mut Document, id: Id<Image>, paint: impl FnOnce(&mut Can
     paint(&mut canvas)
 }
 
+/// Put a texture on the selected faces of the edited mesh (all its faces when
+/// none are selected, or on the selected object in object mode), rescaling
+/// their UVs so the whole texture shows. Returns how many faces it went on.
+pub(super) fn put_on_faces(doc: &mut Document, id: Id<Image>) -> Result<usize, CommandError> {
+    let picked = doc
+        .selection
+        .objects
+        .iter()
+        .next()
+        .and_then(|i| doc.objects.get(*i))
+        .filter(|o| doc.selection.object.is_none() && o.mesh.is_some());
+    let (o, mesh) = match picked {
+        Some(o) => (o, o.mesh.as_deref().expect("filtered")),
+        None => edit_mesh(doc)?,
+    };
+    let object = o.id;
+    let faces: Vec<usize> =
+        if doc.selection.mode == SelectMode::Face && !doc.selection.faces.is_empty() {
+            doc.selection.faces.iter().map(|f| *f as usize).collect()
+        } else {
+            (0..mesh.faces.len()).collect()
+        };
+    let old_sizes: Vec<Vec2> = faces
+        .iter()
+        .map(|f| {
+            mesh.faces[*f]
+                .image
+                .and_then(|i| doc.images.get(i))
+                .map_or(Vec2::splat(doc.settings.tile_px as f32), |i| {
+                    Vec2::new(i.size[0] as f32, i.size[1] as f32)
+                })
+        })
+        .collect();
+    let size = doc.images.get(id).expect("inserted").size;
+    let new_size = Vec2::new(size[0] as f32, size[1] as f32);
+    let mesh = Arc::make_mut(
+        doc.objects
+            .get_mut(object)
+            .expect("edited")
+            .mesh
+            .as_mut()
+            .expect("mesh"),
+    );
+    for (f, old) in faces.iter().zip(old_sizes) {
+        let face = &mut mesh.faces[*f];
+        face.image = Some(id);
+        for c in &mut face.corners {
+            c.uv = c.uv / old * new_size;
+        }
+    }
+    Ok(faces.len())
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PaintTextureNew {
@@ -83,25 +136,7 @@ impl Command for PaintTextureNew {
             ));
         }
         let doc = cx.doc();
-        let (o, mesh) = edit_mesh(doc)?;
-        let object = o.id;
-        let faces: Vec<usize> =
-            if doc.selection.mode == SelectMode::Face && !doc.selection.faces.is_empty() {
-                doc.selection.faces.iter().map(|f| *f as usize).collect()
-            } else {
-                (0..mesh.faces.len()).collect()
-            };
-        let old_sizes: Vec<Vec2> = faces
-            .iter()
-            .map(|f| {
-                mesh.faces[*f]
-                    .image
-                    .and_then(|i| doc.images.get(i))
-                    .map_or(Vec2::splat(doc.settings.tile_px as f32), |i| {
-                        Vec2::new(i.size[0] as f32, i.size[1] as f32)
-                    })
-            })
-            .collect();
+        edit_mesh(doc)?;
         let color = self.color.unwrap_or([255; 4]);
         let pixels: Vec<u8> = color.repeat((self.width * self.height) as usize);
         let base = self.name.unwrap_or_else(|| "texture".into());
@@ -119,24 +154,9 @@ impl Command for PaintTextureNew {
             watch: true,
             pixels: Arc::from(pixels),
         });
-        let new_size = Vec2::new(self.width as f32, self.height as f32);
-        let mesh = Arc::make_mut(
-            doc.objects
-                .get_mut(object)
-                .expect("edited")
-                .mesh
-                .as_mut()
-                .expect("mesh"),
-        );
-        for (f, old) in faces.iter().zip(old_sizes) {
-            let face = &mut mesh.faces[*f];
-            face.image = Some(id);
-            for c in &mut face.corners {
-                c.uv = c.uv / old * new_size;
-            }
-        }
+        let faces = put_on_faces(doc, id)?;
         let name = doc.images.get(id).expect("inserted").name.clone();
-        Ok(json!({ "id": id, "name": name, "faces": faces.len() }))
+        Ok(json!({ "id": id, "name": name, "faces": faces }))
     }
 }
 

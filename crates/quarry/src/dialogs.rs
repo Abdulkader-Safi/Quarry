@@ -23,6 +23,7 @@ impl Quarry {
             Overlay::Settings => self.settings_dialog(close, cx).into_any_element(),
             Overlay::Connect => self.connect_dialog(close, cx).into_any_element(),
             Overlay::Basics => self.basics_dialog(close, cx).into_any_element(),
+            Overlay::Import => self.import_dialog(close, cx).into_any_element(),
         };
         // Clicks on the scrim close; clicks inside the dialog stop there.
         Some(
@@ -184,6 +185,150 @@ impl Quarry {
                         p.text_muted,
                     )),
             )
+    }
+
+    fn import_dialog(
+        &mut self,
+        close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let p = t();
+        let entity = cx.entity();
+        let label = |s: &str| {
+            div()
+                .w(px(110.0))
+                .child(text(s.to_string(), Type::BodyS, p.text_secondary))
+        };
+        let mut files = div().flex().flex_col().gap(px(4.0));
+        for path in &self.dropped {
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            files = files.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.0))
+                    .child(icon("image", 14.0, p.text_muted))
+                    .child(text(name, Type::MonoS, p.text_primary)),
+            );
+        }
+        let pick = |options: &'static [u32], value: u32, set: fn(&mut Quarry, u32)| {
+            let names: Vec<String> = options.iter().map(|o| format!("{o} px")).collect();
+            let names: Vec<&str> = names.iter().map(String::as_str).collect();
+            let entity = entity.clone();
+            segmented(
+                &format!("pick-{}", options[0]),
+                &names,
+                options
+                    .iter()
+                    .position(|o| *o == value)
+                    .unwrap_or(usize::MAX),
+                false,
+                move |i, _, cx| {
+                    entity.update(cx, |this, cx| {
+                        set(this, options[i]);
+                        cx.notify();
+                    })
+                },
+            )
+        };
+        let selected = {
+            let s = &self.reg.document().selection;
+            s.object.is_some() || !s.objects.is_empty()
+        };
+        let mut body = div()
+            .flex()
+            .flex_col()
+            .gap(px(12.0))
+            .child(files)
+            .child(text("Use as", Type::Caption, p.text_muted))
+            .child(segmented(
+                "use-as",
+                &["Tileset", "Texture"],
+                self.drop_texture as usize,
+                true,
+                {
+                    let entity = entity.clone();
+                    move |i, _, cx| {
+                        entity.update(cx, |this, cx| {
+                            this.drop_texture = i == 1;
+                            cx.notify();
+                        })
+                    }
+                },
+            ));
+        if self.drop_texture {
+            body = body.child(text(
+                if selected {
+                    "Goes on the selected object. Its UVs stretch to fit the whole image."
+                } else {
+                    "Added to the project. Select an object first to put it on."
+                },
+                Type::BodyS,
+                p.text_muted,
+            ));
+        } else {
+            body = body
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .child(label("Tile size"))
+                        .child(pick(&[8, 16, 32, 64], self.drop_tile_px, |q, v| {
+                            q.drop_tile_px = v
+                        })),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .child(label("Padding"))
+                        .child(pick(&[0, 1, 2], self.drop_padding, |q, v| {
+                            q.drop_padding = v
+                        })),
+                );
+        }
+        let n = self.dropped.len();
+        let footer = div()
+            .flex()
+            .items_center()
+            .justify_end()
+            .gap(px(8.0))
+            .w_full()
+            .child(
+                button("cancel", ButtonStyle::Secondary, "Cancel", None).on_click(cx.listener(
+                    |this, _, _, cx| {
+                        this.dropped.clear();
+                        this.overlay = Overlay::None;
+                        cx.notify();
+                    },
+                )),
+            )
+            .child(
+                button(
+                    "do-import",
+                    ButtonStyle::Primary,
+                    if n == 1 {
+                        "Import".to_string()
+                    } else {
+                        format!("Import {n}")
+                    },
+                    None,
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.import_dropped(cx))),
+            );
+        dialog(
+            480.0,
+            "Import images",
+            "PNG or PSD. Quarry keeps a copy and watches the file for changes.",
+            close,
+            body,
+            footer,
+        )
     }
 
     fn export_dialog(
