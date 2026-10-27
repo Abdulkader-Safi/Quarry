@@ -1,11 +1,11 @@
 ---
 id: "m8-guide-samples-2026-10-26"
-status: "todo"
+status: "review"
 priority: "medium"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-27T10:00:00.000Z"
+modified: "2026-10-27T14:10:00.000Z"
 labels: ["m8", "mcp", "samples"]
 order: 72
 ---
@@ -22,7 +22,7 @@ FR-MCP-09 and FR-PROJ-08.
 **Done when**
 - [ ] An agent reading only the guide builds and exports a rigged two-clip prop without asking how.
 - [x] The sample tileset licence is CC0 and credited.
-- [ ] Start screen opens the sample robot and idle plays.
+- [x] Start screen opens the sample robot and idle plays.
 
 ## Progress 2026-10-27
 
@@ -36,3 +36,8 @@ FR-MCP-09 and FR-PROJ-08.
 - Checked: walk at 0.25 s renders with knees bent toward the pole; the export passes the validator with no issues; a test opens the file and finds 13 bones and both clips.
 - Found on the way: the renderer drew skinned meshes in rest pose. The snapshot now skins on the CPU, so the viewport, thumbnails and agent screenshots show the current pose (test added).
 - Left: the "Sample robot" button on the start screen.
+
+## Start screen 2026-10-27
+
+- "Sample robot" on the start screen unpacks the sample into the app data folder and opens it with the timeline showing and idle playing (checked by two screenshots 0.7 s apart).
+- For review: the first box needs a real agent run reading only the guide; `cargo run -p xtask -- agent-session` is the scripted stand-in.

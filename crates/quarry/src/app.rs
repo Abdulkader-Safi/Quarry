@@ -837,6 +837,12 @@ impl Quarry {
         );
         if which == "robot" {
             self.open(robot, cx);
+            // The sample opens moving: idle plays with the timeline open.
+            let idle = json!({ "clip": "idle", "time": 0.0 });
+            if self.screen == Screen::Editor && self.run("anim.playhead", idle, cx).is_some() {
+                self.bottom = Some(BottomTab::Timeline);
+                self.playing = true;
+            }
         } else {
             let path = folder.join("Tiles sample.quarry");
             if self
