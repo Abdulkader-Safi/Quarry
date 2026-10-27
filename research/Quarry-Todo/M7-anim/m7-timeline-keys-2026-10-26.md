@@ -33,4 +33,4 @@ FR-ANIM-02 and FR-ANIM-03. The largest UI element after the viewport.
 - Left: the timeline element (tracks, diamonds, zoom, box select, snapping).
 
 **UI (2026-10-26)**
-Timeline: ruler click sets the playhead, tracks per bone channel, keys as diamonds (agent keys violet), interpolation select, auto-key. Dragging keys is not in yet.
+Timeline: ruler click sets the playhead, tracks per bone channel, keys as diamonds (agent keys violet), interpolation select, auto-key. Drag a key to move it; it snaps to whole frames and is one anim.key_move.

@@ -33,4 +33,4 @@ FR-MESH-02. Selection is the input every mesh command relies on.
 - Left (UI): click and lasso input, picking from the renderer's id buffer with backface handling, near-vertex cycling, status bar counts. Lasso can feed `select.by_ids`.
 
 **UI (2026-10-26)**
-Object/Vertex/Edge/Face segmented control and 1-4 keys; click picks by ray against the real triangles; selection tinted cobalt in the view. Box drag is not wired in the view yet (select.box works through the palette and MCP).
+Object/Vertex/Edge/Face segmented control and 1-4 keys; click picks by ray against the real triangles; selection tinted cobalt in the view. Box tool: drag a rectangle in the view (shift adds). Checked with real mouse events: click pick, box select and the cobalt tint.

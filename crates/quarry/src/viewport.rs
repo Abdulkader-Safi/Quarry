@@ -20,6 +20,9 @@ struct Key {
     size: (u32, u32),
     display: quarry_core::model::DisplayToggles,
     anim: (f32, bool),
+    /// Selection is not part of the revision but changes the tint.
+    selection: u64,
+    cursor: [f32; 3],
 }
 
 pub struct Viewport {
@@ -85,6 +88,13 @@ impl Viewport {
             size: (w, h),
             display: doc.view.display,
             anim: (doc.view.anim.time, doc.view.anim.clip.is_some()),
+            selection: {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                format!("{:?}", doc.selection).hash(&mut h);
+                h.finish()
+            },
+            cursor: doc.view.cursor.to_array(),
         };
         if self.key == Some(key) {
             return self.image.clone();

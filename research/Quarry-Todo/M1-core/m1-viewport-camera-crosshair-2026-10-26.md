@@ -35,4 +35,4 @@ FR-VIEW-01 to FR-VIEW-05. Bring the M0 spike into the real app.
 - Left for the app (Figma design): the viewport element, mouse/trackpad/keyboard camera input, the crosshair overlay, and the wireframe, vertex colour, weights and bones toggles in the renderer.
 
 **UI (2026-10-26)**
-Viewport renders the document live (any mesh, textured, skinned). Alt or middle drag orbits, Shift pans, scroll zooms, presets Persp/Iso/Front/Top/Side, F frames. Crosshair tool places it on a hit or the ground; WASD/Q/Shift-E move it. The crosshair itself is not drawn in the view yet.
+Viewport renders the document live (any mesh, textured, skinned). Alt or middle drag orbits, Shift pans, scroll zooms, presets Persp/Iso/Front/Top/Side, F frames. Crosshair tool places it on a hit or the ground; WASD/Q/Shift-E move it. The crosshair draws as X, Y and Z ticks over the meshes.

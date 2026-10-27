@@ -134,6 +134,18 @@ pub enum Field {
     Padding,
 }
 
+/// A timeline key being dragged; one `anim.key_move` on release.
+pub struct KeyDrag {
+    pub row: usize,
+    pub key: usize,
+    pub bone: String,
+    pub channel: &'static str,
+    pub from: f32,
+    pub start_x: f32,
+    pub dx: f32,
+    pub px_per_second: f32,
+}
+
 pub struct LogEntry {
     pub time: SystemTime,
     pub command: String,
@@ -198,6 +210,7 @@ pub struct Quarry {
     tile_stroke: Option<Vec<[i32; 2]>>,
     /// Box select in the view: start and current corner, window coordinates.
     pub box_drag: Option<(Point<Pixels>, Point<Pixels>, bool)>,
+    pub key_drag: Option<KeyDrag>,
     paint_stroke: Option<Vec<[f32; 3]>>,
     pub export_selected: bool,
     pub export_scale: f32,
@@ -324,6 +337,7 @@ impl Quarry {
             field_drag: None,
             tile_stroke: None,
             box_drag: None,
+            key_drag: None,
             paint_stroke: None,
             export_selected: false,
             export_scale: 1.0,
@@ -606,7 +620,7 @@ impl Quarry {
         match result {
             Ok(v) => Some(v),
             Err(e) => {
-                self.flash(e.message);
+                self.flash(format!("{name}: {}", e.message));
                 None
             }
         }
@@ -1190,12 +1204,31 @@ impl Quarry {
         if let Some(d) = &mut self.field_drag {
             d.delta = f32::from(e.position.x) - d.start_x;
             cx.notify();
+        } else if let Some(d) = &mut self.key_drag {
+            d.dx = f32::from(e.position.x) - d.start_x;
+            cx.notify();
         } else if self.view.drag.is_some() || self.box_drag.is_some() {
             self.view_mouse_move(e, cx);
         }
     }
 
     pub fn root_mouse_up(&mut self, cx: &mut Context<Self>) {
+        if let Some(d) = self.key_drag.take() {
+            let fps = self.reg.document().settings.fps.max(1) as f32;
+            let length = self.active_clip_length();
+            let to = ((d.from + d.dx / d.px_per_second) * fps)
+                .round()
+                .clamp(0.0, length * fps)
+                / fps;
+            if (to - d.from).abs() > 1e-4 {
+                self.run(
+                    "anim.key_move",
+                    json!({ "bone": d.bone, "channel": d.channel, "from": d.from, "to": to }),
+                    cx,
+                );
+            }
+            cx.notify();
+        }
         if let Some(d) = self.field_drag.take() {
             self.apply_field(d.field, d.delta, cx);
         }

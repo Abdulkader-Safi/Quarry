@@ -2305,15 +2305,35 @@ impl Quarry {
                     div()
                         .id(("key", row * 1000 + ki))
                         .absolute()
-                        .left(px(x_of(key.time) - 6.0))
+                        .left(px(x_of(self.key_drag_time(
+                            row,
+                            ki,
+                            key.time,
+                            clip.length,
+                            fps,
+                        )) - 6.0))
                         .top(px(y + 7.0))
                         .cursor_pointer()
                         .on_mouse_down(
                             MouseButton::Left,
-                            cx.listener(move |this, _, _, cx| {
-                                this.selected_key = Some((row, ki));
-                                cx.stop_propagation();
-                                cx.notify();
+                            cx.listener({
+                                let (bone, channel, from) =
+                                    (bone.clone(), channel_arg(track.channel), key.time);
+                                move |this, e: &MouseDownEvent, _, cx| {
+                                    this.selected_key = Some((row, ki));
+                                    this.key_drag = Some(crate::app::KeyDrag {
+                                        row,
+                                        key: ki,
+                                        bone: bone.clone(),
+                                        channel,
+                                        from,
+                                        start_x: f32::from(e.position.x),
+                                        dx: 0.0,
+                                        px_per_second: width / clip_len.max(1e-3),
+                                    });
+                                    cx.stop_propagation();
+                                    cx.notify();
+                                }
                             }),
                         )
                         .child(keyframe(state)),
@@ -2385,6 +2405,32 @@ fn safe_image_path(path: &str) -> Option<std::path::PathBuf> {
     let file = std::fs::canonicalize(path).ok()?;
     let ext = file.extension()?.to_str()?.to_ascii_lowercase();
     (file.is_file() && matches!(ext.as_str(), "png" | "psd")).then_some(file)
+}
+
+/// `anim.key_move` channel names.
+fn channel_arg(c: Channel) -> &'static str {
+    match c {
+        Channel::Translation => "translation",
+        Channel::Rotation => "rotation",
+        Channel::Scale => "scale",
+        Channel::IkTarget => "ik_target",
+        Channel::IkPole => "ik_pole",
+    }
+}
+
+impl Quarry {
+    /// Where a key shows while it is dragged: snapped to whole frames.
+    fn key_drag_time(&self, row: usize, key: usize, time: f32, length: f32, fps: f32) -> f32 {
+        match &self.key_drag {
+            Some(d) if d.row == row && d.key == key => {
+                ((time + d.dx / d.px_per_second) * fps)
+                    .round()
+                    .clamp(0.0, length * fps)
+                    / fps
+            }
+            _ => time,
+        }
+    }
 }
 
 #[cfg(test)]
