@@ -8,6 +8,8 @@ It is a personal tool: local only, no accounts, no network.
 
 The editor window follows the Figma design: start screen, the editor with its Tileset, UVs, Paint, Scene and Rig tabs, the timeline, history and agent panels, command search, Export, Settings, Connect Claude, the basics overlay and the live-refresh toast, in dark and light themes. The viewport draws whatever is in the document: tiles, primitives you extrude and edit, painted textures, skinned and posed meshes, and any low-poly glTF model you import.
 
+Beyond the core there are inset, subdivide, bevel, knife and edge-loop select, flat or auto-smooth shading, UV packing, mirrored duplicates, a block brush and sticky wall placement, a weighted random tile palette, vertex colours with baked AO, Bone pose and rest editing, onion skin, pose and clip mirroring, per-key motion curves, auto-rigs for bipeds and quadrupeds with walk clips, OBJ export, export presets, and turntable sprite sheets or GIFs.
+
 Everything also works headless and through MCP: projects, autosave and crash recovery, tiles and live-linked art, mesh editing, UVs, painting, rigging with IK, animation, and glTF export and import. When the window is open, `quarry-mcp` drives it and you watch the agent work (`cargo run -p xtask -- agent-session` runs a scripted session).
 
 `PROGRESS.md` has the measurements and decisions. `docs/spec/06-build-spec.md` is the full plan, and `research/Quarry-Todo/` holds the task board.
@@ -32,9 +34,9 @@ cargo run -p quarry --release                       # the editor, on the start s
 cargo run -p quarry --release -- scene.quarry       # open a project straight away
 ```
 
-Try the sample robot from the start screen (13 bones, idle and walk clips), or the sample tileset. In the view: Alt-drag or middle-drag orbits, Shift pans, scroll zooms, F frames everything, 1 to 4 switch object, vertex, edge and face selection, G, R and T pick the move, rotate and scale gizmo (the magnet turns snapping on, Shift flips it), E extrudes, ⌘K searches every command, ⌘Z undoes.
+Try the sample robot from the start screen (13 bones, idle and walk clips), or the sample tileset. In the view: Alt-drag or middle-drag orbits, Shift pans, scroll zooms, F frames everything, 1 to 4 switch object, vertex, edge and face selection, G, R and T pick the move, rotate and scale gizmo (the magnet turns snapping on, Shift flips it), E extrudes, ⇧D duplicates, ⌘K searches every command, ⌘Z undoes, ⇧⌘E exports again with the last settings. Every key can be changed in Settings > Shortcuts, which also has a Blender-style preset. Drop a PNG or PSD on the window to import it as a tileset or texture.
 
-`QUARRY_UI="side=rig;bottom=timeline;overlay=export"` opens panels at launch, for screenshots and demos.
+`QUARRY_UI="side=rig;bottom=timeline;overlay=export"` opens panels at launch, for screenshots and demos. It also takes `run=command {json args}` and `drop=a.png,b.psd`.
 
 The M0 viewport spike and the renderer checks are still there:
 

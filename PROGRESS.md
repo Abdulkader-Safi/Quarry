@@ -9,15 +9,15 @@ Building milestone by milestone per spec §13. Don't start the next milestone wi
 | M | Scope | State | Notes |
 |---|-------|-------|-------|
 | M0 | De-risk: workspace, CI, viewport, pen, skin, PSD | in progress | built and measured on the M2 Pro; Cairn, Blender, PSD files, pen, M1 Air and Windows/Linux checks need Safi |
-| M1 | Core, shell, command server | in progress | core, file, autosave, settings, server, MCP done; app shell waits for the Figma design |
-| M2 | Tiles and linked images | in progress | commands, linked art and live refresh (~135 ms) done headless; UI waits for the design |
-| M3 | Mesh editing, UVs, scene | in progress | all commands done headless (primitives, selection, edits, mirror, scene, UV); UI waits for the design |
-| M4 | Painting | in progress | paint commands, 3D strokes and pressure sizing done headless; UI waits for the design |
-| M5 | glTF export and import | in progress | export and import done headless (goldens validate 0/0/0); Cairn, Blender and Kenney checks need Safi |
-| M6 | Rigging | in progress | all rig commands and skinned export done headless (arm golden 0/0/0); Cairn and Blender checks need Safi |
-| M7 | Animation | in progress | clips, keys, auto-key, playback, crossfade, sampled export with IK bake done headless (worst 0.19°); UI and Cairn checks left |
-| M8 | Agent experience | in progress | query cap and paging, screenshots as MCP images, guide, permissions, scripted session (6 s) done; samples, Stop pill and Connect dialog left |
-| M9 | Hardening and release | in progress | no-network check, corrupt-file test, bench, packaging and release workflow done; tag, M1 Air numbers and accessibility pass left |
+| M1 | Core, shell, command server | in review | core, file, autosave, settings, server, MCP and the app shell from the Figma design done; one keymap with rebinding and a Blender-style preset |
+| M2 | Tiles and linked images | in review | commands, linked art, live refresh (~135 ms), UI, drag and drop; optional block brush, sticky walls, random palette and external editor done |
+| M3 | Mesh editing, UVs, scene | in review | commands and UI done, gizmo, box select, mirror extrude; optional inset, subdivide, bevel, knife, loop select, shading, UV pack and mirrored duplicates done |
+| M4 | Painting | in review | paint commands and UI, pen pressure in the app (macOS); optional vertex colours and AO bake done; tablet check needs Safi |
+| M5 | glTF export and import | in review | export and import (goldens validate 0/0/0), Export dialog; optional presets and OBJ done; Cairn, Blender and Kenney checks need Safi |
+| M6 | Rigging | in review | rig commands, skinned export (arm golden 0/0/0), Rig panel with pose and rest modes; Cairn and Blender checks need Safi |
+| M7 | Animation | in review | clips, keys, playback, export with IK bake (worst 0.19°), timeline UI; optional onion skin, mirror, curves and sprite sheets done; Cairn checks need Safi |
+| M8 | Agent experience | in review | query paging, MCP screenshots, guide, permissions, scripted session (6 s), samples, Connect dialog; optional auto-rigs done |
+| M9 | Hardening and release | in progress | no-network check, corrupt-file test, bench (viewport ~70 fps, cold start <0.5 s on the M2 Pro), packaging and release workflow done; tag, M1 Air numbers and accessibility pass (with the new design) left |
 
 ## M0 measurements
 
