@@ -2,9 +2,10 @@
 //!
 //! - `tiles-16px.png`: an 8x8 grid of 16 px tiles drawn here, so it is CC0
 //!   with no third-party art in it.
-//! - `sample-robot.quarry`: a low-poly robot built only through registry
-//!   commands (what an agent or a person does), with a 13-bone skeleton,
-//!   leg IK, a painted texture and "idle" and "walk" clips.
+//! - `sample-robot.quarry`: a low-poly robot (six-sided limbs, a faceted
+//!   head) built only through registry commands, what an agent or a person
+//!   does, with a 13-bone skeleton, leg IK, a painted texture and "idle" and
+//!   "walk" clips.
 
 use quarry_core::{CommandRegistry, Source};
 use quarry_io::project::QuarryFiles;
@@ -107,40 +108,51 @@ fn robot(path: &Path) {
         json!({ "name": "Sample robot", "path": path }),
     );
 
-    // Body parts: a box each, standing about 2 m tall, facing +Z.
+    // Body parts, standing about 2 m tall, facing +Z: six-sided limbs, a
+    // faceted head, a box torso for the painted chest panel.
     let parts = [
-        ("Hips", [0.0, 1.0, 0.0], [0.5, 0.2, 0.3]),
-        ("Torso", [0.0, 1.35, 0.0], [0.6, 0.5, 0.35]),
-        ("Head", [0.0, 1.8, 0.0], [0.35, 0.3, 0.3]),
-        ("UpperArm.L", [0.42, 1.45, 0.0], [0.12, 0.12, 0.4]),
-        ("LowerArm.L", [0.72, 1.45, 0.0], [0.11, 0.11, 0.4]),
-        ("Thigh.L", [0.15, 0.7, 0.0], [0.16, 0.4, 0.16]),
-        ("Shin.L", [0.15, 0.25, 0.0], [0.14, 0.45, 0.14]),
+        ("Hips", "cylinder", [0.0, 1.0, 0.0], [0.5, 0.2, 0.32]),
+        ("Torso", "box", [0.0, 1.35, 0.0], [0.6, 0.5, 0.35]),
+        ("Head", "sphere", [0.0, 1.8, 0.0], [0.36, 0.32, 0.32]),
+        (
+            "UpperArm.L",
+            "cylinder",
+            [0.42, 1.45, 0.0],
+            [0.13, 0.4, 0.13],
+        ),
+        (
+            "LowerArm.L",
+            "cylinder",
+            [0.72, 1.45, 0.0],
+            [0.11, 0.4, 0.11],
+        ),
+        ("Thigh.L", "cylinder", [0.15, 0.7, 0.0], [0.17, 0.4, 0.17]),
+        ("Shin.L", "cylinder", [0.15, 0.25, 0.0], [0.15, 0.45, 0.15]),
     ];
-    for (name, at, size) in parts {
-        let mut size = size;
-        if name.contains("Arm") {
-            size = [size[2], size[1], size[0]]; // arms run along X
-        }
+    let mirrored = parts
+        .iter()
+        .filter(|p| p.0.ends_with(".L"))
+        .map(|&(name, kind, at, size)| {
+            (name.replace(".L", ".R"), kind, [-at[0], at[1], at[2]], size)
+        })
+        .collect::<Vec<_>>();
+    let all = parts
+        .iter()
+        .map(|&(name, kind, at, size)| (name.to_string(), kind, at, size))
+        .chain(mirrored);
+    for (name, kind, at, size) in all {
         run(
             &mut r,
             "mesh.add_primitive",
-            json!({ "kind": "box", "name": name, "position": at, "size": size }),
+            json!({ "kind": kind, "segments": 6, "name": name, "position": at, "size": size }),
         );
-    }
-    // Right side: mirror the left parts across X.
-    for (name, at, size) in parts.iter().filter(|p| p.0.ends_with(".L")) {
-        let right = name.replace(".L", ".R");
-        let mut size = *size;
         if name.contains("Arm") {
-            size = [size[2], size[1], size[0]];
+            // Cylinders stand on Y; arms run along X.
+            run(&mut r, "select.by_ids", json!({ "objects": [name] }));
+            run(&mut r, "mesh.transform", json!({ "rotate": [0, 0, 90] }));
         }
-        run(
-            &mut r,
-            "mesh.add_primitive",
-            json!({ "kind": "box", "name": right, "position": [-at[0], at[1], at[2]], "size": size }),
-        );
     }
+    run(&mut r, "select.none", json!({}));
 
     // One painted 32x32 texture on the torso, with a chest panel and a light.
     run(
