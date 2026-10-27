@@ -1,7 +1,7 @@
 //! Side panel tabs (Tileset, UVs, Paint, Scene, Rig) and the bottom strip
 //! (Timeline, History, Agent). Every control runs a registry command.
 
-use crate::app::{BottomTab, Field, HistoryFilter, Menu, Quarry, SideTab, Tool, clock};
+use crate::app::{BottomTab, Field, HistoryFilter, Menu, PanelEdge, Quarry, SideTab, Tool, clock};
 use crate::editor::{fmt_num, thousands};
 use crate::theme::{Type, t, text};
 use crate::ui::*;
@@ -78,9 +78,11 @@ impl Quarry {
             .flex()
             .flex_col()
             .flex_none()
-            .w(px(380.0))
+            .w(px(self.side_w))
             .h_full()
             .bg(p.bg_panel)
+            .relative()
+            .child(self.edge_handle(PanelEdge::Side, cx))
             .child(strip)
             .child(
                 div()
@@ -97,6 +99,39 @@ impl Quarry {
                             .children(content),
                     ),
             )
+    }
+
+    /// A thin strip on a panel's inner edge that resizes it when dragged.
+    fn edge_handle(&self, edge: PanelEdge, cx: &mut Context<Self>) -> impl IntoElement {
+        let d = div().absolute().id(match edge {
+            PanelEdge::Side => "side-edge",
+            PanelEdge::Bottom => "bottom-edge",
+        });
+        let d = match edge {
+            PanelEdge::Side => d
+                .left(px(-4.0))
+                .top_0()
+                .w(px(6.0))
+                .h_full()
+                .cursor(CursorStyle::ResizeLeftRight),
+            PanelEdge::Bottom => d
+                .top(px(-4.0))
+                .left_0()
+                .h(px(6.0))
+                .w_full()
+                .cursor(CursorStyle::ResizeUpDown),
+        };
+        d.on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |this, e: &MouseDownEvent, _, cx| {
+                let (pos, size) = match edge {
+                    PanelEdge::Side => (f32::from(e.position.x), this.side_w),
+                    PanelEdge::Bottom => (f32::from(e.position.y), this.bottom_h),
+                };
+                this.panel_drag = Some((edge, pos, size));
+                cx.stop_propagation();
+            }),
+        )
     }
 
     /// A Select that opens its option list as a Menu.
@@ -1831,14 +1866,20 @@ impl Quarry {
             .flex_none()
             .w_full()
             .bg(p.bg_panel)
+            .relative()
+            .when(self.bottom.is_some(), |d| {
+                d.child(self.edge_handle(PanelEdge::Bottom, cx))
+            })
             .child(strip);
         match self.bottom {
-            Some(BottomTab::Timeline) => panel = panel.child(self.timeline(cx).h(px(300.0))),
+            Some(BottomTab::Timeline) => {
+                panel = panel.child(self.timeline(cx).h(px(self.bottom_h)))
+            }
             Some(BottomTab::History) => {
                 panel = panel.child(
                     div()
                         .id("history-scroll")
-                        .h(px(240.0))
+                        .h(px(self.bottom_h - 60.0))
                         .overflow_y_scroll()
                         .child(
                             div()
@@ -1850,7 +1891,9 @@ impl Quarry {
                         ),
                 )
             }
-            Some(BottomTab::Agent) => panel = panel.child(self.agent_body().h(px(240.0))),
+            Some(BottomTab::Agent) => {
+                panel = panel.child(self.agent_body().h(px(self.bottom_h - 60.0)))
+            }
             None => {}
         }
         panel

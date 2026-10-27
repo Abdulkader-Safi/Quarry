@@ -158,6 +158,12 @@ pub struct UvDrag {
     pub applied: Option<[i32; 2]>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PanelEdge {
+    Side,
+    Bottom,
+}
+
 pub struct LogEntry {
     pub time: SystemTime,
     pub command: String,
@@ -227,6 +233,11 @@ pub struct Quarry {
     /// The magnet: gizmo drags snap to the grid, 15° and 0.1×. Off is smooth.
     pub snap: bool,
     pub uv_drag: Option<UvDrag>,
+    /// Side panel width and bottom panel height, saved in settings.
+    pub side_w: f32,
+    pub bottom_h: f32,
+    /// An edge being dragged: which, pointer start, size at start.
+    pub panel_drag: Option<(PanelEdge, f32, f32)>,
     paint_stroke: Option<Vec<[f32; 3]>>,
     pub export_selected: bool,
     pub export_scale: f32,
@@ -357,6 +368,9 @@ impl Quarry {
             gizmo_drag: None,
             snap: false,
             uv_drag: None,
+            side_w: 380.0,
+            bottom_h: 300.0,
+            panel_drag: None,
             paint_stroke: None,
             export_selected: false,
             export_scale: 1.0,
@@ -381,6 +395,14 @@ impl Quarry {
         app.start_ticker(cx);
         if let Some(path) = std::env::args().nth(1).filter(|a| a.ends_with(".quarry")) {
             app.open(PathBuf::from(path), cx);
+        }
+        if let Some(panels) = app.settings.window_state.as_ref().map(|w| w.panels.clone()) {
+            if let Some(w) = panels.get("side") {
+                app.side_w = w.clamp(300.0, 640.0);
+            }
+            if let Some(h) = panels.get("bottom") {
+                app.bottom_h = h.clamp(160.0, 600.0);
+            }
         }
         app.apply_ui_env(cx);
         app
@@ -1238,6 +1260,16 @@ impl Quarry {
             self.gizmo_move(e, cx);
         } else if self.uv_drag.is_some() {
             self.uv_move(e, cx);
+        } else if let Some((edge, start, size)) = self.panel_drag {
+            match edge {
+                PanelEdge::Side => {
+                    self.side_w = (size - (f32::from(e.position.x) - start)).clamp(300.0, 640.0)
+                }
+                PanelEdge::Bottom => {
+                    self.bottom_h = (size - (f32::from(e.position.y) - start)).clamp(160.0, 600.0)
+                }
+            }
+            cx.notify();
         } else if self.view.drag.is_some() || self.box_drag.is_some() {
             self.view_mouse_move(e, cx);
         }
@@ -1355,6 +1387,15 @@ impl Quarry {
 
     pub fn root_mouse_up(&mut self, cx: &mut Context<Self>) {
         if self.uv_drag.take().is_some() {
+            cx.notify();
+        }
+        if self.panel_drag.take().is_some() {
+            let panels = &mut self.settings.window_state.get_or_insert_default().panels;
+            panels.insert("side".into(), self.side_w);
+            panels.insert("bottom".into(), self.bottom_h);
+            if let Some(dirs) = &self.dirs {
+                let _ = self.settings.save(dirs);
+            }
             cx.notify();
         }
         if self.gizmo_drag.take().is_some() {

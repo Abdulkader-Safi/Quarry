@@ -26,4 +26,4 @@ FR-UI-01 and FR-UI-04.
 - [ ] Every panel has an empty state, not a blank box.
 
 **UI (2026-10-26)**
-Top bar with menus, tool rail per tab, viewport with floating bars, side tabs (Tileset, UVs, Paint, Scene, Rig), bottom strip (Timeline, History, Agent), status bar. Dark and light themes from the Theme variables. Panel resizing is not in yet.
+Top bar with menus, tool rail per tab, viewport with floating bars, side tabs (Tileset, UVs, Paint, Scene, Rig), bottom strip (Timeline, History, Agent), status bar. Dark and light themes from the Theme variables. Drag the side panel's left edge or the bottom panel's top edge to resize; sizes are saved in settings and restored on launch.
