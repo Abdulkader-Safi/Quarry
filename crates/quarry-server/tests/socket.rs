@@ -59,7 +59,7 @@ fn owner(
         ready_tx.send(()).unwrap();
         while !stop.load(Ordering::SeqCst) {
             if let Some(incoming) = server.recv_timeout(Duration::from_millis(20)) {
-                server.handle(incoming, &mut registry, &roots);
+                let _ = server.handle(incoming, &mut registry, &roots);
             }
         }
         registry

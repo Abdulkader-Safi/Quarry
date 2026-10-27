@@ -87,8 +87,14 @@ impl Server {
     }
 
     /// Run one request against the registry as the agent, streaming progress.
-    /// `roots` are the folders the agent may write into.
-    pub fn handle(&self, incoming: Incoming, registry: &mut CommandRegistry, roots: &[PathBuf]) {
+    /// `roots` are the folders the agent may write into. Returns the reply, so
+    /// a window can show it in its agent log.
+    pub fn handle(
+        &self,
+        incoming: Incoming,
+        registry: &mut CommandRegistry,
+        roots: &[PathBuf],
+    ) -> Result<Value, CommandError> {
         let Incoming {
             id,
             command,
@@ -113,7 +119,8 @@ impl Server {
         {
             tracing::warn!(%command, source = "agent", "refused: {}", e.message);
         }
-        let _ = reply.send(response(&id, result).to_string());
+        let _ = reply.send(response(&id, result.clone()).to_string());
+        result
     }
 }
 

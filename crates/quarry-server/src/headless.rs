@@ -114,7 +114,7 @@ pub fn run(options: Options) -> Result<(), String> {
     loop {
         if let Some(incoming) = server.recv_timeout(Duration::from_millis(50)) {
             let roots = roots(&options, &registry);
-            server.handle(incoming, &mut registry, &roots);
+            let _ = server.handle(incoming, &mut registry, &roots);
             watcher.sync(registry.document());
             last_request = Instant::now();
         }
