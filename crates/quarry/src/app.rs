@@ -200,6 +200,9 @@ pub struct Quarry {
     pub scene_filter: Entity<InputState>,
     pub palette_query: Entity<InputState>,
     pub shortcut_filter: Entity<InputState>,
+    /// The keymap action waiting for its new key in Settings.
+    pub rebinding: Option<&'static str>,
+    pub rebind_note: Option<String>,
     pub export_path: Entity<InputState>,
     pub agent_log: Vec<LogEntry>,
     pub agent_busy_until: Option<Instant>,
@@ -390,6 +393,8 @@ impl Quarry {
             canvas_bounds: Default::default(),
             timeline_bounds: Default::default(),
             rig_note: None,
+            rebinding: None,
+            rebind_note: None,
         };
         app.sync_component_theme(cx);
         app.start_ticker(cx);
@@ -1629,74 +1634,101 @@ impl Quarry {
     }
 
     pub fn key_down(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let k = &e.keystroke;
-        let cmd = k.modifiers.platform || k.modifiers.control;
-        match (cmd, k.modifiers.shift, k.key.as_str()) {
-            (true, _, "k") => self.open_palette(window, cx),
-            (true, false, "z") => self.undo(cx),
-            (true, true, "z") => self.redo(cx),
-            (true, _, "s") => self.save(cx),
-            (true, _, "o") => self.pick_and_open(cx),
-            (true, _, "e") => {
+        let chord = crate::keys::chord(&e.keystroke);
+        if let Some(action) = self.rebinding.take()
+            && self.overlay == Overlay::Settings
+        {
+            if chord != "escape" {
+                let taken = crate::keys::rebind(&mut self.settings.shortcuts, action, &chord);
+                self.rebind_note = taken.map(|t| {
+                    format!(
+                        "{} was on {t}, which now has no key.",
+                        crate::keys::display(&chord)
+                    )
+                });
+                if let Some(dirs) = &self.dirs {
+                    let _ = self.settings.save(dirs);
+                }
+            }
+            cx.notify();
+            return;
+        }
+        if chord == "escape" {
+            self.overlay = Overlay::None;
+            self.menu = None;
+            cx.notify();
+            return;
+        }
+        let Some(action) = crate::keys::action_for(&self.settings.shortcuts, &chord) else {
+            return;
+        };
+        let global = chord.starts_with("cmd+");
+        if !global
+            && (self.overlay != Overlay::None
+                || self.screen != Screen::Editor
+                || self.text_input_focused(window, cx))
+        {
+            return;
+        }
+        self.run_action(action, window, cx);
+    }
+
+    /// Run a keymap action (see `keys::ACTIONS`).
+    pub fn run_action(&mut self, action: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let mut tool = |this: &mut Self, t: Tool| {
+            this.tool = t;
+            cx.notify();
+        };
+        match action {
+            "palette" => self.open_palette(window, cx),
+            "history.undo" => self.undo(cx),
+            "history.redo" => self.redo(cx),
+            "project.save" => self.save(cx),
+            "project.open" => self.pick_and_open(cx),
+            "export.run" => {
                 self.overlay = Overlay::Export;
                 cx.notify();
             }
-            (_, _, "escape") => {
-                self.overlay = Overlay::None;
-                self.menu = None;
-                cx.notify();
-            }
-            _ if self.overlay != Overlay::None || self.screen != Screen::Editor => {}
-            _ if self.text_input_focused(window, cx) => {}
-            (false, _, "f") => {
+            "view.frame" => {
                 self.run("view.frame", json!({}), cx);
             }
-            (false, _, "1") => self.set_mode(SelectMode::Object, cx),
-            (false, _, "2") => self.set_mode(SelectMode::Vertex, cx),
-            (false, _, "3") => self.set_mode(SelectMode::Edge, cx),
-            (false, _, "4") => self.set_mode(SelectMode::Face, cx),
-            (false, false, "e") => {
+            "select.object" => self.set_mode(SelectMode::Object, cx),
+            "select.vertex" => self.set_mode(SelectMode::Vertex, cx),
+            "select.edge" => self.set_mode(SelectMode::Edge, cx),
+            "select.face" => self.set_mode(SelectMode::Face, cx),
+            "mesh.extrude" => {
                 self.run("mesh.extrude", json!({ "distance": 1.0 }), cx);
             }
-            (false, false, "g") => {
-                self.tool = Tool::Translate;
-                cx.notify();
+            "mesh.delete" => self.delete_selection(cx),
+            "tool.move" => tool(self, Tool::Translate),
+            "tool.rotate" => tool(self, Tool::Spin),
+            "tool.scale" => tool(self, Tool::Grow),
+            "rig.bone_add" => {
+                if self.reg.document().skeletons.is_empty() {
+                    self.run("rig.skeleton_new", json!({}), cx);
+                } else {
+                    let parent = self.selected_bone_name();
+                    self.run("rig.bone_add", json!({ "parent": parent }), cx);
+                }
             }
-            (false, false, "r") => {
-                self.tool = Tool::Spin;
-                cx.notify();
-            }
-            (false, false, "t") => {
-                self.tool = Tool::Grow;
-                cx.notify();
-            }
-            (false, _, "space") => {
+            "anim.play" => {
                 self.playing = !self.playing;
                 cx.notify();
             }
-            (false, _, "delete" | "backspace") => self.delete_selection(cx),
-            (false, _, key @ ("w" | "a" | "s" | "d" | "q")) => {
+            cursor if cursor.starts_with("cursor.") => {
                 let c = self.reg.document().view.cursor;
                 let step = self.reg.document().settings.grid_step;
-                let d = match key {
-                    "w" => glam::Vec3::NEG_Z,
-                    "s" => glam::Vec3::Z,
-                    "a" => glam::Vec3::NEG_X,
-                    "d" => glam::Vec3::X,
+                let d = match cursor {
+                    "cursor.forward" => glam::Vec3::NEG_Z,
+                    "cursor.back" => glam::Vec3::Z,
+                    "cursor.left" => glam::Vec3::NEG_X,
+                    "cursor.right" => glam::Vec3::X,
+                    "cursor.up" => glam::Vec3::Y,
                     _ => glam::Vec3::NEG_Y,
                 };
                 self.run(
                     "view.cursor",
                     json!({ "position": (c + d * step).to_array() }),
-                    cx,
-                );
-            }
-            (false, true, "e") => {
-                let c = self.reg.document().view.cursor;
-                let step = self.reg.document().settings.grid_step;
-                self.run(
-                    "view.cursor",
-                    json!({ "position": (c + glam::Vec3::Y * step).to_array() }),
                     cx,
                 );
             }

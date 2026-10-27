@@ -87,7 +87,15 @@ impl Quarry {
                             .min_w_0()
                             .child(text(name, Type::MonoS, p.text_muted)),
                     )
-                    .child(text(shortcut_for(name), Type::MonoS, p.text_secondary)),
+                    .child(text(
+                        if crate::keys::ACTIONS.iter().any(|a| a.0 == name) {
+                            crate::keys::display(crate::keys::bound(&self.settings.shortcuts, name))
+                        } else {
+                            String::new()
+                        },
+                        Type::MonoS,
+                        p.text_secondary,
+                    )),
             );
         }
         if matches.is_empty() {
@@ -573,38 +581,68 @@ impl Quarry {
             .border_1()
             .border_color(p.border_subtle)
             .rounded(px(6.0));
-        for (action, area, key) in SHORTCUTS
-            .iter()
-            .filter(|s| filter.is_empty() || s.0.to_lowercase().contains(&filter))
-        {
-            list = list.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.0))
-                    .h(px(32.0))
-                    .px(px(12.0))
-                    .child(
-                        div()
-                            .flex_1()
-                            .child(text(*action, Type::BodyS, p.text_primary)),
-                    )
-                    .child(text(*area, Type::BodyS, p.text_muted))
-                    .child(
-                        div()
-                            .w(px(110.0))
-                            .flex()
-                            .justify_center()
-                            .px(px(8.0))
-                            .py(px(3.0))
-                            .bg(p.bg_raised)
-                            .border_1()
-                            .border_color(p.border_default)
-                            .rounded(px(4.0))
-                            .child(text(*key, Type::MonoS, p.text_secondary)),
-                    ),
-            );
+        let matches = |label: &str| filter.is_empty() || label.to_lowercase().contains(&filter);
+        let row = |label: &'static str, area: &'static str, chip: Stateful<Div>| {
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .gap(px(8.0))
+                .h(px(32.0))
+                .px(px(12.0))
+                .child(
+                    div()
+                        .flex_1()
+                        .child(text(label, Type::BodyS, p.text_primary)),
+                )
+                .child(text(area, Type::BodyS, p.text_muted))
+                .child(chip)
+        };
+        let chip = |id: SharedString, key: String, on: bool| {
+            div()
+                .id(id)
+                .w(px(110.0))
+                .flex()
+                .justify_center()
+                .px(px(8.0))
+                .py(px(3.0))
+                .bg(if on { p.accent_subtle } else { p.bg_raised })
+                .border_1()
+                .border_color(if on { p.accent } else { p.border_default })
+                .rounded(px(4.0))
+                .child(text(
+                    key,
+                    Type::MonoS,
+                    if on { p.text_primary } else { p.text_secondary },
+                ))
+        };
+        for &(action, label, area, _) in crate::keys::ACTIONS.iter().filter(|a| matches(a.1)) {
+            let on = self.rebinding == Some(action);
+            let key = if on {
+                "Press a key".to_string()
+            } else {
+                crate::keys::display(crate::keys::bound(&self.settings.shortcuts, action))
+            };
+            let chip = chip(format!("key-{action}").into(), key, on)
+                .cursor_pointer()
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    // Keep the filter box from typing the key.
+                    window.blur(cx);
+                    this.rebinding = Some(action);
+                    this.rebind_note = None;
+                    cx.notify();
+                }));
+            list = list.child(row(label, area, chip));
         }
+        for &(label, area, key) in crate::keys::MOUSE.iter().filter(|m| matches(m.0)) {
+            let chip = chip(format!("mouse-{label}").into(), key.into(), false);
+            list = list.child(row(label, area, chip));
+        }
+        let note = match (&self.rebinding, &self.rebind_note) {
+            (Some(_), _) => Some("Press the new key. Esc cancels.".to_string()),
+            (None, Some(n)) => Some(n.clone()),
+            _ => None,
+        };
         div()
             .flex()
             .flex_col()
@@ -625,7 +663,12 @@ impl Quarry {
                     )
                     .child(select("preset-keys", "Quarry default").w(px(170.0))),
             )
-            .child(list)
+            .child(
+                list.id("shortcut-list")
+                    .max_h(px(420.0))
+                    .overflow_y_scroll(),
+            )
+            .when_some(note, |d, n| d.child(text(n, Type::BodyS, p.text_muted)))
     }
 
     fn connect_dialog(
@@ -990,44 +1033,6 @@ impl Quarry {
         )
     }
 }
-
-fn shortcut_for(name: &str) -> &'static str {
-    match name {
-        "rig.bind_auto" => "⌘W",
-        "rig.weight_paint" => "W",
-        "rig.mirror_weights" => "⇧M",
-        "anim.autokey" => "K",
-        "mesh.extrude" => "E",
-        "view.frame" => "F",
-        "history.undo" => "⌘Z",
-        "history.redo" => "⇧⌘Z",
-        "project.save" => "⌘S",
-        "export.run" => "⌘E",
-        "rig.bone_add" => "B",
-        "anim.key_set" => "I",
-        _ => "",
-    }
-}
-
-const SHORTCUTS: &[(&str, &str, &str)] = &[
-    ("Place tile", "Tiles", "Click"),
-    ("Erase tile", "Tiles", "Right-click"),
-    ("Extrude", "Mesh", "E"),
-    ("Select modes", "Mesh", "1 2 3 4"),
-    ("Delete", "Mesh", "⌫"),
-    ("Weight brush", "Rig", "W"),
-    ("Auto weights", "Rig", "⌘W"),
-    ("Add bone", "Rig", "B"),
-    ("Insert key", "Animate", "I"),
-    ("Play or pause", "Animate", "Space"),
-    ("Frame selection", "View", "F"),
-    ("Orbit", "View", "⌥ drag"),
-    ("Move crosshair", "View", "W A S D"),
-    ("Undo", "Global", "⌘Z"),
-    ("Save", "Global", "⌘S"),
-    ("Export", "Global", "⌘E"),
-    ("Command search", "Global", "⌘K"),
-];
 
 fn capital(s: &str) -> String {
     let mut c = s.chars();

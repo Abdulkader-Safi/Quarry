@@ -222,66 +222,75 @@ impl Quarry {
     }
 
     fn bar_menu(&self, name: &'static str, cx: &mut Context<Self>) -> impl IntoElement {
-        let items: Vec<(&str, &str, &str)> = match name {
+        let items: Vec<(&str, &str)> = match name {
             "File" => vec![
-                ("New project", "⌘N", "project.new"),
-                ("Open…", "⌘O", "project.open"),
-                ("Save", "⌘S", "project.save"),
-                ("Import .glb or .gltf…", "", "import.gltf"),
-                ("Export…", "⌘E", "export.run"),
+                ("New project", "project.new"),
+                ("Open…", "project.open"),
+                ("Save", "project.save"),
+                ("Import .glb or .gltf…", "import.gltf"),
+                ("Export…", "export.run"),
             ],
             "Edit" => vec![
-                ("Undo", "⌘Z", "history.undo"),
-                ("Redo", "⇧⌘Z", "history.redo"),
-                ("Select all", "⌘A", "select.all"),
-                ("Select none", "", "select.none"),
-                ("Invert selection", "", "select.invert"),
+                ("Undo", "history.undo"),
+                ("Redo", "history.redo"),
+                ("Select all", "select.all"),
+                ("Select none", "select.none"),
+                ("Invert selection", "select.invert"),
             ],
             "View" => vec![
-                ("Frame all", "F", "view.frame"),
-                ("Iso view", "", "view.camera"),
-                ("Toggle wireframe", "", "@wireframe"),
-                ("Toggle grid", "", "@grid"),
-                ("Light theme", "", "@light"),
-                ("Dark theme", "", "@dark"),
+                ("Frame all", "view.frame"),
+                ("Iso view", "view.camera"),
+                ("Toggle wireframe", "@wireframe"),
+                ("Toggle grid", "@grid"),
+                ("Light theme", "@light"),
+                ("Dark theme", "@dark"),
             ],
             "Mesh" => vec![
-                ("Add box", "", "@box"),
-                ("Add cylinder", "", "@cylinder"),
-                ("Add cone", "", "@cone"),
-                ("Add sphere", "", "@sphere"),
-                ("Add wedge", "", "@wedge"),
-                ("Add plane", "", "@plane"),
-                ("Extrude", "E", "mesh.extrude"),
-                ("Merge", "M", "mesh.merge"),
-                ("Split", "", "mesh.split"),
-                ("Make face", "", "mesh.make_face"),
-                ("Flip normals", "", "mesh.flip_normals"),
+                ("Add box", "@box"),
+                ("Add cylinder", "@cylinder"),
+                ("Add cone", "@cone"),
+                ("Add sphere", "@sphere"),
+                ("Add wedge", "@wedge"),
+                ("Add plane", "@plane"),
+                ("Extrude", "mesh.extrude"),
+                ("Merge", "mesh.merge"),
+                ("Split", "mesh.split"),
+                ("Make face", "mesh.make_face"),
+                ("Flip normals", "mesh.flip_normals"),
             ],
             "Rig" => vec![
-                ("New skeleton", "", "rig.skeleton_new"),
-                ("Add bone", "B", "rig.bone_add"),
-                ("Auto weights", "⌘W", "rig.bind_auto"),
-                ("Mirror bones", "", "rig.mirror_bones"),
-                ("Reset pose", "", "rig.pose_reset"),
+                ("New skeleton", "rig.skeleton_new"),
+                ("Add bone", "rig.bone_add"),
+                ("Auto weights", "rig.bind_auto"),
+                ("Mirror bones", "rig.mirror_bones"),
+                ("Reset pose", "rig.pose_reset"),
             ],
             "Animate" => vec![
-                ("New clip", "", "anim.clip_new"),
-                ("Play or pause", "Space", "@play"),
-                ("Stop", "", "anim.stop"),
-                ("Auto-key on or off", "K", "anim.autokey"),
+                ("New clip", "anim.clip_new"),
+                ("Play or pause", "@play"),
+                ("Stop", "anim.stop"),
+                ("Auto-key on or off", "anim.autokey"),
             ],
             _ => vec![
-                ("The basics", "", "@basics"),
-                ("Connect Claude", "", "@connect"),
-                ("Keyboard shortcuts", "", "@keys"),
+                ("The basics", "@basics"),
+                ("Connect Claude", "@connect"),
+                ("Keyboard shortcuts", "@keys"),
             ],
         };
         let mut m = menu(230.0);
-        for (i, (label, key, action)) in items.into_iter().enumerate() {
+        for (i, (label, action)) in items.into_iter().enumerate() {
+            let bound = match action {
+                "@play" => "anim.play",
+                a => a,
+            };
+            let key = if crate::keys::ACTIONS.iter().any(|a| a.0 == bound) {
+                crate::keys::display(crate::keys::bound(&self.settings.shortcuts, bound))
+            } else {
+                String::new()
+            };
             let action = action.to_string();
             m = m.child(
-                menu_row((name, i), label.to_string(), key, true).on_click(cx.listener(
+                menu_row((name, i), label.to_string(), &key, true).on_click(cx.listener(
                     move |this, _, _, cx| {
                         this.menu = None;
                         this.menu_action(&action, cx);
@@ -794,11 +803,15 @@ impl Quarry {
                     .child(text("Mirror", Type::Caption, p.text_muted))
                     .child(text(mirror, Type::MonoS, p.text_primary))
                     .child(divider_v(14.0));
+                let key = |a| crate::keys::display(crate::keys::bound(&self.settings.shortcuts, a));
                 for (label, key) in [
-                    ("Extrude", "E"),
-                    ("Frame", "F"),
-                    ("Modes", "1–4"),
-                    ("Orbit", "⌥ drag"),
+                    ("Extrude", key("mesh.extrude")),
+                    ("Frame", key("view.frame")),
+                    (
+                        "Modes",
+                        format!("{}–{}", key("select.object"), key("select.face")),
+                    ),
+                    ("Orbit", "⌥ drag".into()),
                 ] {
                     bar = bar
                         .child(text(label, Type::LabelS, p.text_secondary))

@@ -6,6 +6,7 @@ mod assets;
 mod dialogs;
 mod editor;
 mod gizmo;
+mod keys;
 mod panels;
 mod start;
 mod theme;
