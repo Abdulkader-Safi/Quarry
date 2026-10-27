@@ -393,7 +393,7 @@ fn view_changes_stay_out_of_history_and_undo_keeps_the_view() {
     run(&mut r, "view.camera", json!({ "preset": "top" })).unwrap();
     run(&mut r, "view.display", json!({ "grid": false })).unwrap();
     assert_eq!(r.history().entries().len(), 1, "only the box is an edit");
-    let view = r.document().view;
+    let view = r.document().view.clone();
     run(&mut r, "history.undo", json!({})).unwrap();
     assert!(r.document().objects.is_empty());
     assert_eq!(

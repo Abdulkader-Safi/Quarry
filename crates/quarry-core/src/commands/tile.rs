@@ -1,4 +1,4 @@
-//! Tile commands (FR-TILE-01 to 05, 09). Tiles are quads in a mesh object
+//! Tile commands (FR-TILE-01 to 05, 08, 09). Tiles are quads in a mesh object
 //! ("Tiles" unless named), one per 1 m cell on the placement plane, sharing
 //! vertices with their neighbours.
 
@@ -7,6 +7,7 @@ use crate::command::{Command, CommandError, CommandRegistry, CommandResult, Cont
 use crate::id::Id;
 use crate::model::{
     Axis, Brush, Corner, Document, Face, Image, ImageRole, Influences, Mesh, Object, ObjectKind,
+    TilePalette,
 };
 use glam::{Mat4, Vec2, Vec3, Vec4};
 use quarry_ops::tile::{self as ops, Orient};
@@ -22,6 +23,7 @@ const DEFAULT_OBJECT: &str = "Tiles";
 pub(super) fn register(r: &mut CommandRegistry) {
     r.register::<TileImportTileset>();
     r.register::<TileBrush>();
+    r.register::<TilePaletteSet>();
     r.register::<TilePlane>();
     r.register::<TilePlace>();
     r.register::<TileErase>();
@@ -212,6 +214,75 @@ impl Command for TileBrush {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct TilePaletteSet {
+    /// Tiles to scatter, as tile numbers in the tileset (left to right, then
+    /// down, from 0). Empty clears the palette and placing uses the brush again.
+    pub tiles: Vec<u32>,
+    /// Relative weight per tile, in the same order. Default 1 each.
+    pub weights: Option<Vec<f32>>,
+    /// Turn each placed tile a random number of quarter turns. Default false.
+    pub random_rotate: Option<bool>,
+    /// Tileset ID or name. Default the brush's tileset.
+    pub tileset: Option<String>,
+}
+
+impl Command for TilePaletteSet {
+    const NAME: &'static str = "tile.palette_set";
+    const DESCRIPTION: &'static str = "Set a weighted tile palette: tile.place and tile.fill_rect then pick a tile per cell at random by weight, optionally turned a random quarter. Empty tiles clears it.";
+    const UNDOABLE: bool = false;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        if self.tiles.is_empty() {
+            cx.doc().view.tile.palette = None;
+            return Ok(json!({ "palette": null }));
+        }
+        let doc = &cx.state.doc;
+        let image = match (&self.tileset, doc.view.tile.brush) {
+            (Some(reference), _) => tileset(doc, reference)?,
+            (None, Some(b)) => doc.images.get(b.tileset).ok_or_else(|| {
+                CommandError::not_found("The brush's tileset was removed. Name a tileset.")
+            })?,
+            (None, None) => {
+                return Err(CommandError::invalid(
+                    "Name a tileset, or pick a brush with tile.brush first.",
+                ));
+            }
+        };
+        let (cols, rows) = ops::grid(image.size[0], image.size[1], image.tile_px, image.padding);
+        if let Some(t) = self.tiles.iter().find(|t| **t >= cols * rows) {
+            return Err(CommandError::new(
+                ErrorCode::OutOfBounds,
+                format!(
+                    "Tile {t} is past the end of the tileset, which has {} tiles.",
+                    cols * rows
+                ),
+            ));
+        }
+        let weights = self.weights.unwrap_or_else(|| vec![1.0; self.tiles.len()]);
+        if weights.len() != self.tiles.len() {
+            return Err(CommandError::invalid("Give one weight per tile."));
+        }
+        if weights.iter().any(|w| !(w.is_finite() && *w >= 0.0))
+            || weights.iter().sum::<f32>() <= 0.0
+        {
+            return Err(CommandError::invalid(
+                "Weights must be 0 or more, and at least one above 0.",
+            ));
+        }
+        let palette = TilePalette {
+            tileset: image.id,
+            tiles: self.tiles.into_iter().zip(weights).collect(),
+            random_rotate: self.random_rotate.unwrap_or(false),
+            seed: doc.view.tile.palette.as_ref().map_or(0, |p| p.seed),
+        };
+        let reply = json!({ "tiles": palette.tiles, "random_rotate": palette.random_rotate });
+        cx.doc().view.tile.palette = Some(palette);
+        Ok(json!({ "palette": reply }))
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct TilePlane {
     /// The plane's normal: y is the floor, x and z are walls.
     pub axis: Axis,
@@ -240,7 +311,7 @@ impl Command for TilePlane {
 }
 
 pub(super) fn plane_frame(doc: &Document) -> ops::Frame {
-    let tool = doc.view.tile;
+    let tool = &doc.view.tile;
     let axis = match tool.axis {
         Axis::X => 0,
         Axis::Y => 1,
@@ -374,22 +445,31 @@ pub(super) fn compact(mesh: &mut Mesh) {
     }
 }
 
-/// Stamp the brush with its first cell at `at`. Returns tiles placed.
+/// Stamp the brush with its first cell at each of `cells`, or with a tile
+/// picked from the palette per cell when one is set. Returns tiles placed.
 fn stamp_brush(
     doc: &mut Document,
     id: Id<Object>,
     inverse: Mat4,
     cells: &[(i32, i32)],
 ) -> Result<usize, CommandError> {
-    let (b, image) = brush(doc)?;
+    let (brush, _) = brush(doc)?;
+    let palette = doc.view.tile.palette.clone();
+    let tileset = palette.as_ref().map_or(brush.tileset, |p| p.tileset);
+    let image = doc.images.get(tileset).ok_or_else(|| {
+        CommandError::not_found("The palette's tileset was removed. Call tile.palette_set again.")
+    })?;
     let (tile_px, padding, size) = (image.tile_px, image.padding, image.size);
     let (cols, _) = ops::grid(size[0], size[1], tile_px, padding);
     let plane = plane_frame(doc);
-    let layout = ops::stamp(b.width, b.height, orient(&b));
     let mesh = mesh_of(doc, id);
     let mut placed = 0;
-    for &(i, j) in cells {
-        for &((di, dj), (tx, ty)) in &layout {
+    for (n, &(i, j)) in cells.iter().enumerate() {
+        let b = match &palette {
+            Some(p) => pick(p, n as u64, cols),
+            None => brush,
+        };
+        for ((di, dj), (tx, ty)) in ops::stamp(b.width, b.height, orient(&b)) {
             let (col, row) = (b.col + tx, b.row + ty);
             let corners = plane
                 .cell(i + di, j + dj)
@@ -399,7 +479,40 @@ fn stamp_brush(
             placed += 1;
         }
     }
+    if let Some(p) = &mut doc.view.tile.palette {
+        p.seed = p.seed.wrapping_add(cells.len() as u64);
+    }
     Ok(placed)
+}
+
+/// The palette's tile for the `n`th cell of a placement, as a 1x1 brush.
+fn pick(p: &TilePalette, n: u64, cols: u32) -> Brush {
+    // splitmix64: same seed, same tiles, so a replayed session matches.
+    let mut x = p.seed.wrapping_add(n).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
+    let total: f32 = p.tiles.iter().map(|t| t.1).sum();
+    let mut at = (x >> 40) as f32 / (1u64 << 24) as f32 * total;
+    let tile = p
+        .tiles
+        .iter()
+        .find(|t| {
+            at -= t.1;
+            at < 0.0
+        })
+        .or(p.tiles.last())
+        .map_or(0, |t| t.0);
+    Brush {
+        tileset: p.tileset,
+        col: tile % cols,
+        row: tile / cols,
+        width: 1,
+        height: 1,
+        rotate: if p.random_rotate { (x & 3) as u8 } else { 0 },
+        mirror: false,
+        flip: false,
+    }
 }
 
 fn erase_cells(doc: &mut Document, id: Id<Object>, inverse: Mat4, cells: &[(i32, i32)]) -> usize {

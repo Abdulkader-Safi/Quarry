@@ -246,7 +246,7 @@ impl Default for ProjectSettings {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct View {
     pub camera: crate::camera::OrbitCamera,
@@ -267,8 +267,8 @@ pub struct AnimTool {
     pub autokey: bool,
 }
 
-/// Tile brush and placement plane (FR-TILE-02, 04, 05).
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+/// Tile brush and placement plane (FR-TILE-02, 04, 05, 08).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TileTool {
     pub brush: Option<Brush>,
@@ -276,6 +276,8 @@ pub struct TileTool {
     pub axis: Axis,
     /// Degrees about the plane's first axis.
     pub tilt: f32,
+    /// When set, placing picks a tile from it per cell instead of the brush.
+    pub palette: Option<TilePalette>,
 }
 
 impl Default for TileTool {
@@ -284,8 +286,21 @@ impl Default for TileTool {
             brush: None,
             axis: Axis::Y,
             tilt: 0.0,
+            palette: None,
         }
     }
+}
+
+/// Weighted tiles for random placement (FR-TILE-08).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TilePalette {
+    pub tileset: Id<Image>,
+    /// (tile number, weight); weights are relative.
+    pub tiles: Vec<(u32, f32)>,
+    /// Turn each placed tile a random number of quarter turns.
+    pub random_rotate: bool,
+    /// Advances with every placement so repeated calls differ but replay the same.
+    pub seed: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

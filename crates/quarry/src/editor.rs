@@ -751,7 +751,7 @@ impl Quarry {
         let mut bar = floating_bar();
         match self.side {
             SideTab::Tileset if !self.animating() => {
-                let tile = doc.view.tile;
+                let tile = &doc.view.tile;
                 let axis = match tile.axis {
                     PlaneAxis::X => "X",
                     PlaneAxis::Y => "Y",

@@ -235,3 +235,44 @@ fn resize_keeps_pixel_uvs_and_warns_and_missing_links_still_open() {
         "the embedded copy is used"
     );
 }
+
+#[test]
+fn a_palette_scatters_tiles_by_weight() {
+    let dir = folder("palette");
+    let png = dir.join("sheet.png");
+    write_tileset(&png, 64, 16);
+    let mut r = registry();
+    run(&mut r, "tile.import_tileset", json!({ "path": png }));
+    run(&mut r, "tile.brush", json!({ "tile": 0 }));
+    run(
+        &mut r,
+        "tile.palette_set",
+        json!({ "tiles": [3, 5], "weights": [1, 1], "random_rotate": true }),
+    );
+    // 100 placements, one call per cell like separate clicks.
+    for k in 0..100 {
+        run(&mut r, "tile.place", json!({ "cells": [[k % 10, k / 10]] }));
+    }
+    let mesh = tiles(r.document());
+    let count = |n: u32| mesh.faces.iter().filter(|f| f.tile == Some(n)).count();
+    let (a, b) = (count(3), count(5));
+    assert_eq!(a + b, 100, "only palette tiles land");
+    assert!((35..=65).contains(&a), "tile 3 landed {a} times");
+
+    // Bad input changes nothing; an empty list goes back to the brush.
+    let err = r
+        .execute("tile.palette_set", json!({ "tiles": [99] }), Source::Human)
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::OutOfBounds);
+    run(&mut r, "tile.palette_set", json!({ "tiles": [] }));
+    run(&mut r, "tile.place", json!({ "cells": [[20, 20]] }));
+    assert_eq!(count_after(&r, 0), 1);
+}
+
+fn count_after(r: &CommandRegistry, n: u32) -> usize {
+    tiles(r.document())
+        .faces
+        .iter()
+        .filter(|f| f.tile == Some(n))
+        .count()
+}

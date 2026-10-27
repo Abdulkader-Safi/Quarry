@@ -222,6 +222,183 @@ impl Quarry {
 
     // ---- Tileset ----
 
+    /// FR-TILE-08: weighted tiles with their share of placements, an add cell
+    /// that takes the brush's tile, and random quarter turns.
+    fn palette_row(
+        &mut self,
+        image: &DocImage,
+        picture: Option<Arc<RenderImage>>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let p = t();
+        let palette = self
+            .reg
+            .document()
+            .view
+            .tile
+            .palette
+            .clone()
+            .filter(|pl| pl.tileset == image.id);
+        let tiles = palette.as_ref().map_or(Vec::new(), |pl| pl.tiles.clone());
+        let rotate = palette.as_ref().is_some_and(|pl| pl.random_rotate);
+        let total: f32 = tiles.iter().map(|t| t.1).sum();
+        let (tile_px, padding) = (image.tile_px.max(1), image.padding);
+        let cols = quarry_ops::tile::grid(image.size[0], image.size[1], tile_px, padding)
+            .0
+            .max(1);
+        let scale = 48.0 / tile_px as f32;
+        let tileset = image.id.to_string();
+        let send = move |this: &mut Quarry,
+                         tiles: Vec<(u32, f32)>,
+                         rotate: bool,
+                         cx: &mut Context<Quarry>| {
+            let (ids, weights): (Vec<u32>, Vec<f32>) = tiles.into_iter().unzip();
+            this.run(
+                "tile.palette_set",
+                json!({ "tileset": tileset, "tiles": ids, "weights": weights, "random_rotate": rotate }),
+                cx,
+            );
+        };
+        let send = std::rc::Rc::new(send);
+        let mut row = div().flex().flex_wrap().gap(px(8.0));
+        for (i, (tile, weight)) in tiles.iter().enumerate() {
+            let [x, y, _, _] =
+                quarry_ops::tile::tile_rect(tile % cols, tile / cols, tile_px, padding);
+            let crop = div()
+                .relative()
+                .size(px(48.0))
+                .overflow_hidden()
+                .rounded(px(2.0))
+                .border_1()
+                .border_color(p.border_default)
+                .children(picture.clone().map(|pic| {
+                    img(pic)
+                        .absolute()
+                        .left(px(-x * scale))
+                        .top(px(-y * scale))
+                        .w(px(image.size[0] as f32 * scale))
+                        .h(px(image.size[1] as f32 * scale))
+                }));
+            let (more, less) = (send.clone(), send.clone());
+            let (up, down) = (tiles.clone(), tiles.clone());
+            row = row.child(
+                div()
+                    .id(("palette-tile", i))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap(px(4.0))
+                    .cursor_pointer()
+                    .child(crop)
+                    .child(text(
+                        format!("{:.0}%", weight / total.max(f32::EPSILON) * 100.0),
+                        Type::MonoS,
+                        p.text_secondary,
+                    ))
+                    // Click weighs a tile more (1 to 9, then back to 1); right-click removes it.
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        let mut tiles = up.clone();
+                        tiles[i].1 = if tiles[i].1 >= 9.0 {
+                            1.0
+                        } else {
+                            tiles[i].1.floor() + 1.0
+                        };
+                        more(this, tiles, rotate, cx);
+                    }))
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(move |this, _, _, cx| {
+                            let mut tiles = down.clone();
+                            tiles.remove(i);
+                            less(this, tiles, rotate, cx);
+                        }),
+                    ),
+            );
+        }
+        let brush = self
+            .reg
+            .document()
+            .view
+            .tile
+            .brush
+            .filter(|b| b.tileset == image.id);
+        let add = send.clone();
+        let current = tiles.clone();
+        row = row.child(
+            div()
+                .id("palette-add")
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(px(4.0))
+                .cursor_pointer()
+                .child(
+                    div()
+                        .size(px(48.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(2.0))
+                        .border_1()
+                        .border_dashed()
+                        .border_color(p.border_default)
+                        .child(icon("plus", 16.0, p.text_muted)),
+                )
+                .child(text("add", Type::MonoS, p.text_muted))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    let Some(b) = brush else {
+                        this.flash("Pick a tile in the tileset first, then add it.");
+                        return;
+                    };
+                    let tile = b.row * cols + b.col;
+                    let mut tiles = current.clone();
+                    if !tiles.iter().any(|t| t.0 == tile) {
+                        tiles.push((tile, 1.0));
+                    }
+                    add(this, tiles, rotate, cx);
+                })),
+        );
+        let turn = send.clone();
+        let entity = cx.entity();
+        let rotation = segmented(
+            "palette-rotate",
+            &["Off", "Random 90° steps"],
+            rotate as usize,
+            false,
+            move |i, _, cx| {
+                let tiles = tiles.clone();
+                let turn = turn.clone();
+                entity.update(cx, |this, cx| {
+                    if !tiles.is_empty() {
+                        turn(this, tiles, i == 1, cx);
+                    }
+                })
+            },
+        );
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.0))
+            .child(row)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.0))
+                    .child(div().w(px(80.0)).child(text("Rotation", Type::BodyS, p.text_secondary)))
+                    .child(rotation),
+            )
+            .child(note_box(
+                Tone::Neutral,
+                if palette.is_some() {
+                    "Placing scatters these tiles by share. Click a tile to weigh it more, right-click to remove it."
+                } else {
+                    "Pick a tile, then add it here to scatter several tiles at random."
+                },
+            ))
+            .into_any_element()
+    }
+
     fn tileset_panel(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let p = t();
         // Cheap: the arenas inside are shared, so this copies a few pointers.
@@ -339,7 +516,11 @@ impl Quarry {
             .rounded(px(8.0))
             .overflow_hidden()
             .cursor_pointer()
-            .children(picture.map(|i| img(i).absolute().inset_0().size_full()));
+            .children(
+                picture
+                    .clone()
+                    .map(|i| img(i).absolute().inset_0().size_full()),
+            );
         if let Some(b) = brush.filter(|b| b.tileset == image.id) {
             let cell = tile as f32 * scale;
             grid = grid.child(
@@ -436,6 +617,10 @@ impl Quarry {
                 )
                 .into_any_element(),
         );
+        out.push(self.header("palette", "Random palette", cx));
+        if self.open_section("palette") {
+            out.push(self.palette_row(&image, picture, cx));
+        }
         out.push(self.header("plane", "Placement plane", cx));
         if self.open_section("plane") {
             let axis = doc.view.tile.axis;
@@ -934,7 +1119,7 @@ impl Quarry {
                     .overflow_hidden()
                     .cursor(CursorStyle::Crosshair)
                     .child(crate::viewport::measure(bounds.clone()))
-                    .children(picture.map(|i| img(i).absolute().inset_0().size_full()));
+                    .children(picture.clone().map(|i| img(i).absolute().inset_0().size_full()));
                 for (r, _) in self.uv_rects(id, true) {
                     canvas = canvas.child(uv_outline(r, w, h, p.accent, false));
                 }

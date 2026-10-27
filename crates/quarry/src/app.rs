@@ -476,8 +476,11 @@ impl Quarry {
                     self.files_dropped(&paths, cx)
                 }
                 ("bone", v) => self.selected_bone = v.parse().ok(),
-                ("run", cmd) => {
-                    let _ = self.reg.execute(cmd, json!({}), Source::Human);
+                // `run=tile.place {"cells":[[0,0]]}`: a command and optional JSON args.
+                ("run", v) => {
+                    let (cmd, args) = v.split_once(' ').unwrap_or((v, "{}"));
+                    let args = serde_json::from_str(args).unwrap_or_else(|_| json!({}));
+                    let _ = self.reg.execute(cmd, args, Source::Human);
                 }
                 _ => {}
             }

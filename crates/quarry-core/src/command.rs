@@ -348,14 +348,14 @@ impl CommandRegistry {
         match request {
             // Undo and redo move edits, never the camera or crosshair.
             Some(Request::Undo) => {
-                let view = self.state.doc.view;
+                let view = self.state.doc.view.clone();
                 self.history.undo(&mut self.state);
                 self.state.doc.view = view;
                 let objects = self.state.doc.objects.clone();
                 self.state.doc.selection.retain_valid(&objects);
             }
             Some(Request::Redo) => {
-                let view = self.state.doc.view;
+                let view = self.state.doc.view.clone();
                 self.history.redo(&mut self.state);
                 self.state.doc.view = view;
                 let objects = self.state.doc.objects.clone();
