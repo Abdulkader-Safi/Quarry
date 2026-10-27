@@ -200,6 +200,90 @@ fn bench() {
     println!("open       {open:?}   target < 2 s");
     println!("export     {export:?}  ({glb} bytes)  target < 2 s");
     let _ = std::fs::remove_dir_all(&dir);
+    bench_viewport();
+}
+
+/// The editor's viewport path per frame: advance the clip, skin on the CPU,
+/// render offscreen at 1600x1000, read back and swap to BGRA as the app does.
+/// 100k triangles, 50 bones, 5 skinned meshes (NFR-01).
+fn bench_viewport() {
+    use quarry_core::{CommandRegistry, Source};
+    use serde_json::json;
+    use std::time::Instant;
+    let mut r = CommandRegistry::new();
+    let mut run = |name: &str, args: serde_json::Value| {
+        r.execute(name, args, Source::Human)
+            .unwrap_or_else(|e| panic!("{name}: {}", e.message))
+    };
+    run("rig.skeleton_new", json!({ "name": "rig" }));
+    for i in 0..50 {
+        let (y0, y1) = (i as f32 * 0.06, (i + 1) as f32 * 0.06);
+        let mut args = json!({ "name": format!("b{i}"), "head": [0, y0, 0], "tail": [0, y1, 0] });
+        if i > 0 {
+            args["parent"] = json!(format!("b{}", i - 1));
+        }
+        run("rig.bone_add", args);
+    }
+    for i in 0..5 {
+        let name = format!("skinned{i}");
+        run(
+            "mesh.add_primitive",
+            json!({ "kind": "sphere", "segments": 128, "size": [0.6, 3.0, 0.6],
+                    "position": [i as f32 - 2.0, 1.5, 0], "name": name }),
+        );
+        run("rig.bind_auto", json!({ "object": name }));
+    }
+    for i in 0..90 {
+        let (x, z) = ((i % 15) as f32 * 0.8 - 6.0, (i / 15) as f32 * 0.8 + 1.5);
+        run(
+            "mesh.add_primitive",
+            json!({ "kind": "sphere", "segments": 16, "size": [0.5, 0.5, 0.5], "position": [x, 0.25, z] }),
+        );
+    }
+    run("anim.clip_new", json!({ "name": "sway", "length": 1.0 }));
+    for b in ["b5", "b20", "b35"] {
+        for (t, z) in [(0.0, -10.0), (0.5, 10.0), (1.0, -10.0)] {
+            run(
+                "anim.key_set",
+                json!({ "bone": b, "channel": "rotation", "time": t, "value": [0, 0, z] }),
+            );
+        }
+    }
+    let doc = r.document();
+    let triangles: usize = doc
+        .objects
+        .iter()
+        .filter_map(|o| o.mesh.as_deref())
+        .map(|m| m.triangle_count())
+        .sum();
+    let camera = quarry_core::camera::OrbitCamera {
+        target: glam::Vec3::new(0.0, 1.0, 2.0),
+        distance: 14.0,
+        ..Default::default()
+    };
+    // The window's viewport at 1x, and at 2x as a Retina screen renders it.
+    for (w, h) in [(1600, 1000), (2360, 1600)] {
+        let frame = |r: &mut CommandRegistry| {
+            r.execute("anim.play", json!({}), Source::Human).unwrap();
+            let rgba =
+                quarry_render::viewport_rgba(r.document(), &camera, w, h).expect("a GPU adapter");
+            let mut bgra = image::RgbaImage::from_raw(w, h, rgba).unwrap();
+            for p in bgra.pixels_mut() {
+                p.0.swap(0, 2);
+            }
+        };
+        frame(&mut r); // warm up the device and pipelines
+        let n = 60;
+        let started = Instant::now();
+        for _ in 0..n {
+            frame(&mut r);
+        }
+        let per = started.elapsed() / n;
+        println!(
+            "viewport   {per:?}/frame = {:.0} fps  ({triangles} tris, 50 bones, 5 skinned, {w}x{h})  target 60 fps",
+            1.0 / per.as_secs_f64()
+        );
+    }
 }
 
 fn run(command: &mut Command) {

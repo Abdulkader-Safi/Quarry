@@ -52,6 +52,18 @@ Both rows still need a run on the M1 Air 8 GB.
 | Save .quarry (0.95 MB) | 66 ms | < 2 s |
 | Open .quarry | 13 ms | < 2 s |
 | Export .glb (6.1 MB) | 52 ms | < 2 s |
+| Editor viewport, 100,800 tris, 50 bones, 5 skinned meshes playing, 1600x1000 | 14 ms/frame, about 70 fps | 60 fps |
+| Same at 2360x1600 (the viewport on a Retina screen) | 14.5 ms/frame, about 69 fps | 60 fps |
+| Cold start to first frame (release, empty start screen) | 223 to 466 ms over 3 launches | < 2 s |
+
+The viewport row times what the app does per frame: advance the clip, skin on the CPU, render
+offscreen, read back, swap to BGRA. It leaves out the upload of that image to GPUI, which the
+benchmark cannot reach. During playback the app redraws only when the clip time changes (30 fps
+by default), so the real budget is 33 ms. The 60 fps margin here is thin: the M1 Air may land
+under 60, and the place to look first is the CPU skinning and readback in `quarry-render`.
+
+Startup reads settings, the recent list's thumbnails, and one listing of the autosave folder (to
+offer crash recovery). Nothing else.
 
 No network (NFR-03): `cargo run -p xtask -- no-network`, also a CI job. `quarry` and `quarry-mcp`
 link no HTTP client, TLS or WebSocket crate, and Quarry's code opens no TCP or UDP socket. GPUI

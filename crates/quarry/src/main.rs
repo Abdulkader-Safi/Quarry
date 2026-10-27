@@ -124,7 +124,11 @@ impl Render for Spike {
     }
 }
 
+/// When the process started, for the cold-start time logged on the first frame.
+static STARTED: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
 fn main() {
+    STARTED.get_or_init(Instant::now);
     let args: Vec<String> = std::env::args().collect();
     let number = |name: &str| {
         args.iter()
@@ -270,6 +274,11 @@ impl Render for app::Quarry {
         if window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
         }
+        static FIRST: std::sync::Once = std::sync::Once::new();
+        FIRST.call_once(|| {
+            let ms = STARTED.get().map_or(0, |t| t.elapsed().as_millis());
+            tracing::info!("first frame {ms} ms after launch");
+        });
         let body = match self.screen {
             app::Screen::Start => self.render_start(cx),
             app::Screen::Editor => self.render_editor(window, cx),
