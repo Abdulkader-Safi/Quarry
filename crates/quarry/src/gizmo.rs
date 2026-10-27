@@ -256,6 +256,44 @@ pub fn paint(handles: [Handle; 3], kind: Kind, active: Option<usize>) -> impl In
     .inset_0()
 }
 
+/// Bones as the design draws them: a 2px light line from head to tail with a
+/// dot at each joint; the picked bone in cobalt. Window coordinates.
+pub fn paint_bones(bones: Vec<(Point<Pixels>, Point<Pixels>, bool)>) -> impl IntoElement {
+    let p = crate::theme::t();
+    let (line, picked) = (p.text_primary, p.accent);
+    canvas(
+        |_, _, _| {},
+        move |_, _, window, _| {
+            let dot = |window: &mut Window, c: Point<Pixels>, r: f32, color: Rgba| {
+                let mut b = PathBuilder::fill();
+                let pts: Vec<_> = (0..12)
+                    .map(|i| {
+                        let a = i as f32 / 12.0 * std::f32::consts::TAU;
+                        point(c.x + px(r * a.cos()), c.y + px(r * a.sin()))
+                    })
+                    .collect();
+                b.add_polygon(&pts, true);
+                if let Ok(path) = b.build() {
+                    window.paint_path(path, color);
+                }
+            };
+            for (head, tail, on) in &bones {
+                let color = if *on { picked } else { line };
+                let mut b = PathBuilder::stroke(px(if *on { 3.0 } else { 2.0 }));
+                b.move_to(*head);
+                b.line_to(*tail);
+                if let Ok(path) = b.build() {
+                    window.paint_path(path, color);
+                }
+                dot(window, *head, 3.5, color);
+                dot(window, *tail, 2.5, color);
+            }
+        },
+    )
+    .absolute()
+    .inset_0()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Drag, Handle, Kind, distance_to_segment};

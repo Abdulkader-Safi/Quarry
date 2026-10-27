@@ -453,6 +453,26 @@ impl Quarry {
             }
             _ => None,
         };
+        if self.reg.document().view.display.bones {
+            let mut bones = Vec::new();
+            for skeleton in self.reg.document().skeletons.iter() {
+                let posed = skeleton.bones.iter().zip(skeleton.pose_world());
+                for (i, (bone, world)) in posed.enumerate() {
+                    let length = bone.head.distance(bone.tail);
+                    let head = self.view.project(world.transform_point3(glam::Vec3::ZERO));
+                    let tail = self
+                        .view
+                        .project(world.transform_point3(glam::Vec3::Y * length));
+                    if let (Some(h), Some(t)) = (head, tail) {
+                        let picked = self.side == SideTab::Rig && self.selected_bone == Some(i);
+                        bones.push((h, t, picked));
+                    }
+                }
+            }
+            if !bones.is_empty() {
+                v = v.child(crate::gizmo::paint_bones(bones));
+            }
+        }
         if let Some((kind, handles)) = self.gizmo() {
             let active = self.gizmo_drag.as_ref().map(|d| d.axis);
             v = v.child(crate::gizmo::paint(handles, kind, active));

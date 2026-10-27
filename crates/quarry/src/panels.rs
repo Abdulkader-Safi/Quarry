@@ -1195,7 +1195,10 @@ impl Quarry {
             let picture = self.images.get(image, 352);
             let [w, h] = image.size;
             let aspect = h as f32 / w.max(1) as f32;
+            let bounds = self.canvas_bounds.clone();
+            let has_faces = !self.reg.document().selection.faces.is_empty();
             let mut canvas = div()
+                .id("uv-canvas")
                 .relative()
                 .w_full()
                 .h(px(354.0 * aspect + 2.0))
@@ -1204,7 +1207,25 @@ impl Quarry {
                 .border_color(p.border_default)
                 .rounded(px(8.0))
                 .overflow_hidden()
-                .children(picture.map(|i| img(i).absolute().inset_0().size_full().opacity(0.55)));
+                .when(has_faces, |d| d.cursor(CursorStyle::ClosedHand))
+                .child(crate::viewport::measure(bounds.clone()))
+                .children(picture.map(|i| img(i).absolute().inset_0().size_full().opacity(0.55)))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, e: &MouseDownEvent, _, cx| {
+                        if this.reg.document().selection.faces.is_empty() {
+                            this.flash("Select faces in Face mode (4) to move their UVs.");
+                            return;
+                        }
+                        let width = f32::from(bounds.get().size.width).max(1.0);
+                        this.uv_drag = Some(crate::app::UvDrag {
+                            start: e.position,
+                            texels_per_px: w as f32 / width,
+                            applied: None,
+                        });
+                        cx.notify();
+                    }),
+                );
             for (r, picked) in self.uv_rects(image.id, false) {
                 canvas = canvas.child(uv_outline(
                     r,

@@ -150,6 +150,14 @@ pub struct KeyDrag {
     pub px_per_second: f32,
 }
 
+/// Selected UV islands dragged on the UV canvas, in whole pixels; applied
+/// live and undone step by step so the drag is one undo entry.
+pub struct UvDrag {
+    pub start: Point<Pixels>,
+    pub texels_per_px: f32,
+    pub applied: Option<[i32; 2]>,
+}
+
 pub struct LogEntry {
     pub time: SystemTime,
     pub command: String,
@@ -218,6 +226,7 @@ pub struct Quarry {
     pub gizmo_drag: Option<crate::gizmo::Drag>,
     /// The magnet: gizmo drags snap to the grid, 15° and 0.1×. Off is smooth.
     pub snap: bool,
+    pub uv_drag: Option<UvDrag>,
     paint_stroke: Option<Vec<[f32; 3]>>,
     pub export_selected: bool,
     pub export_scale: f32,
@@ -347,6 +356,7 @@ impl Quarry {
             key_drag: None,
             gizmo_drag: None,
             snap: false,
+            uv_drag: None,
             paint_stroke: None,
             export_selected: false,
             export_scale: 1.0,
@@ -1226,6 +1236,8 @@ impl Quarry {
             cx.notify();
         } else if self.gizmo_drag.is_some() {
             self.gizmo_move(e, cx);
+        } else if self.uv_drag.is_some() {
+            self.uv_move(e, cx);
         } else if self.view.drag.is_some() || self.box_drag.is_some() {
             self.view_mouse_move(e, cx);
         }
@@ -1258,6 +1270,40 @@ impl Quarry {
             None => None,
         };
         if let Some(d) = &mut self.gizmo_drag {
+            d.applied = applied;
+        }
+        cx.notify();
+    }
+
+    fn uv_move(&mut self, e: &MouseMoveEvent, cx: &mut Context<Self>) {
+        let Some(d) = &self.uv_drag else { return };
+        let k = d.texels_per_px;
+        let delta = [
+            (f32::from(e.position.x - d.start.x) * k).round() as i32,
+            (f32::from(e.position.y - d.start.y) * k).round() as i32,
+        ];
+        let target = (delta != [0, 0]).then_some(delta);
+        if target == d.applied {
+            return;
+        }
+        if d.applied.is_some() {
+            let _ = self.reg.execute("history.undo", json!({}), Source::Human);
+        }
+        let applied = match target {
+            Some(t) => match self.reg.execute(
+                "uv.transform",
+                json!({ "translate": [t[0], t[1]] }),
+                Source::Human,
+            ) {
+                Ok(_) => Some(t),
+                Err(err) => {
+                    self.flash(format!("uv.transform: {}", err.message));
+                    None
+                }
+            },
+            None => None,
+        };
+        if let Some(d) = &mut self.uv_drag {
             d.applied = applied;
         }
         cx.notify();
@@ -1308,6 +1354,9 @@ impl Quarry {
     }
 
     pub fn root_mouse_up(&mut self, cx: &mut Context<Self>) {
+        if self.uv_drag.take().is_some() {
+            cx.notify();
+        }
         if self.gizmo_drag.take().is_some() {
             self.sync_camera_from_doc();
             cx.notify();
