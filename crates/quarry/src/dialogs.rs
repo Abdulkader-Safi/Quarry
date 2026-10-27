@@ -681,7 +681,33 @@ impl Quarry {
                 .flex()
                 .flex_col()
                 .gap(px(12.0))
-                .child(property_row("Image editor", [text_field(text(self.settings.external_editor.clone().unwrap_or("System default".into()), Type::BodyS, p.text_primary)).flex_1().into_any_element()]))
+                .child(property_row(
+                    "Image editor",
+                    [
+                        text_field(text(
+                            self.settings
+                                .external_editor
+                                .clone()
+                                .unwrap_or("System default".into()),
+                            Type::BodyS,
+                            p.text_primary,
+                        ))
+                        .flex_1()
+                        .into_any_element(),
+                        button("editor-pick", ButtonStyle::Secondary, "Choose", None)
+                            .on_click(cx.listener(|this, _, _, cx| this.choose_editor(cx)))
+                            .into_any_element(),
+                        button("editor-reset", ButtonStyle::Ghost, "Use default", None)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.settings.external_editor = None;
+                                if let Some(dirs) = &this.dirs {
+                                    let _ = this.settings.save(dirs);
+                                }
+                                cx.notify();
+                            }))
+                            .into_any_element(),
+                    ],
+                ))
                 .child(note_box(Tone::Neutral, "Open in editor uses this app for linked tilesets and textures. Saving there refreshes Quarry live."))
                 .into_any_element(),
             4 => div()

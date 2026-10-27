@@ -1,4 +1,4 @@
-//! Tile commands (FR-TILE-01 to 05, 08, 09). Tiles are quads in a mesh object
+//! Tile commands (FR-TILE-01 to 09). Tiles are quads in a mesh object
 //! ("Tiles" unless named), one per 1 m cell on the placement plane, sharing
 //! vertices with their neighbours.
 
@@ -24,6 +24,8 @@ pub(super) fn register(r: &mut CommandRegistry) {
     r.register::<TileImportTileset>();
     r.register::<TileBrush>();
     r.register::<TilePaletteSet>();
+    r.register::<TileBlock>();
+    r.register::<TileAttach>();
     r.register::<TilePlane>();
     r.register::<TilePlace>();
     r.register::<TileErase>();
@@ -737,5 +739,184 @@ impl Command for TileEyedrop {
         };
         cx.doc().view.tile.brush = Some(brush);
         Ok(json!({ "brush": brush }))
+    }
+}
+
+// ---- block brush (FR-TILE-07) and sticky placement (FR-TILE-06) -------------
+
+/// The brush (or a palette pick) for the `n`th placement, with its tileset's
+/// grid: (brush, tile_px, padding, columns).
+fn stamp_for(doc: &Document, n: u64) -> Result<(Brush, u32, u32, u32), CommandError> {
+    let (brush, _) = brush(doc)?;
+    let palette = doc.view.tile.palette.clone();
+    let tileset = palette.as_ref().map_or(brush.tileset, |p| p.tileset);
+    let image = doc
+        .images
+        .get(tileset)
+        .ok_or_else(|| CommandError::not_found("The brush's tileset was removed."))?;
+    let (cols, _) = ops::grid(image.size[0], image.size[1], image.tile_px, image.padding);
+    let b = match &palette {
+        Some(p) => pick(p, n, cols),
+        None => brush,
+    };
+    Ok((b, image.tile_px, image.padding, cols))
+}
+
+/// One brush tile on four corners (in the order cell corners run).
+fn put_tile(mesh: &mut Mesh, corners: [Vec3; 4], stamp: (Brush, u32, u32, u32)) {
+    let (b, tile_px, padding, cols) = stamp;
+    let uvs = ops::tile_uvs(ops::tile_rect(b.col, b.row, tile_px, padding), orient(&b));
+    put(mesh, corners, uvs, b.tileset, b.row * cols + b.col);
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TileBlock {
+    /// Cells [i, j] on the placement plane; each gets a 1 m cube standing on
+    /// it. Default the crosshair's cell.
+    pub cells: Option<Vec<[i32; 2]>>,
+    /// Take the cubes away instead.
+    #[serde(default)]
+    pub remove: bool,
+    pub object: Option<String>,
+}
+
+impl Command for TileBlock {
+    const NAME: &'static str = "tile.block";
+    const DESCRIPTION: &'static str = "Block brush: add (or remove) a 1 m cube of brush tiles on each cell of the placement plane. Six faces share eight vertices, and neighbouring blocks share theirs.";
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let cells = cells(self.cells);
+        if cells.len() > 4096 {
+            return Err(CommandError::new(
+                ErrorCode::OutOfBounds,
+                "At most 4,096 blocks per call.",
+            ));
+        }
+        let doc = cx.doc();
+        if !self.remove {
+            brush(doc)?;
+        }
+        let (id, inverse) = target(doc, self.object.as_deref())?;
+        let plane = plane_frame(doc);
+        let up = plane.n;
+        let mut changed = 0;
+        for (n, &(i, j)) in cells.iter().enumerate() {
+            let c = plane.cell(i, j);
+            let t = c.map(|p| p + up);
+            // Outward faces: the cell runs counter-clockwise about `up`.
+            let mut faces = vec![t, [c[3], c[2], c[1], c[0]]];
+            for k in 0..4 {
+                let (a, b) = (c[k], c[(k + 1) % 4]);
+                faces.push([a, b, b + up, a + up]);
+            }
+            let faces: Vec<[Vec3; 4]> = faces
+                .into_iter()
+                .map(|f| f.map(|p| inverse.transform_point3(p)))
+                .collect();
+            // Walls shared with a neighbouring block cancel, like voxels: a
+            // face already on those corners belongs to the neighbour.
+            if self.remove {
+                let mesh = mesh_of(doc, id);
+                if face_at(mesh, &faces[0]).is_none() {
+                    continue; // no block here
+                }
+                let mut reopened = Vec::new();
+                for (k, f) in faces.iter().enumerate() {
+                    match face_at(mesh, f) {
+                        Some(at) => {
+                            mesh.faces.remove(at);
+                            changed += 1;
+                        }
+                        // A side that had cancelled: the neighbour gets its wall back.
+                        None if k >= 2 => reopened.push([f[3], f[2], f[1], f[0]]),
+                        None => {}
+                    }
+                }
+                compact(mesh);
+                if !reopened.is_empty() {
+                    let stamp = stamp_for(doc, 0)?;
+                    let mesh = mesh_of(doc, id);
+                    for f in reopened {
+                        put_tile(mesh, f, stamp);
+                    }
+                }
+            } else {
+                let seed = doc.view.tile.palette.as_ref().map_or(0, |p| p.seed);
+                let stamp = stamp_for(doc, seed + n as u64)?;
+                let mesh = mesh_of(doc, id);
+                for f in faces {
+                    match face_at(mesh, &f) {
+                        Some(at) => {
+                            mesh.faces.remove(at);
+                        }
+                        None => put_tile(mesh, f, stamp),
+                    }
+                    changed += 1;
+                }
+                compact(mesh);
+            }
+        }
+        if !self.remove
+            && let Some(p) = &mut doc.view.tile.palette
+        {
+            p.seed = p.seed.wrapping_add(cells.len() as u64);
+        }
+        Ok(json!({ "object": id, "faces": changed }))
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TileAttach {
+    /// The tiles object. Default "Tiles".
+    pub object: Option<String>,
+    /// The face whose edge the new tile joins.
+    pub face: u32,
+    /// The edge as two vertex indices of that face.
+    pub edge: [u32; 2],
+}
+
+impl Command for TileAttach {
+    const NAME: &'static str = "tile.attach";
+    const DESCRIPTION: &'static str = "Sticky placement: stand a brush tile on an edge of an existing face, square to it and 1 m out along its normal. A floor edge gets a wall that faces the floor.";
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let doc = cx.doc();
+        brush(doc)?;
+        let id = super::object(doc, self.object.as_deref().unwrap_or(DEFAULT_OBJECT))?;
+        let stamp = stamp_for(doc, doc.view.tile.palette.as_ref().map_or(0, |p| p.seed))?;
+        let mesh = mesh_of(doc, id);
+        let face = mesh
+            .faces
+            .get(self.face as usize)
+            .ok_or_else(|| CommandError::not_found("There is no such face. Call query.mesh."))?;
+        let c = &face.corners;
+        let n = c.len();
+        let [x, y] = self.edge;
+        // The edge as the face runs it: a then b.
+        let (a, b) = match (0..n).find_map(|k| {
+            let (p, q) = (c[k].vertex, c[(k + 1) % n].vertex);
+            ((p, q) == (x, y) || (p, q) == (y, x)).then_some((p, q))
+        }) {
+            Some(e) => e,
+            None => return Err(CommandError::invalid("That edge is not on that face.")),
+        };
+        let pts: Vec<Vec3> = c
+            .iter()
+            .map(|k| mesh.positions[k.vertex as usize])
+            .collect();
+        let mut normal = Vec3::ZERO;
+        for k in 0..pts.len() {
+            normal += pts[k].cross(pts[(k + 1) % pts.len()]);
+        }
+        let up = normal.normalize_or(Vec3::Y);
+        let (pa, pb) = (mesh.positions[a as usize], mesh.positions[b as usize]);
+        // Run the shared edge the other way so the two faces wind alike.
+        put_tile(mesh, [pb, pa, pa + up, pb + up], stamp);
+        if let Some(p) = &mut doc.view.tile.palette {
+            p.seed = p.seed.wrapping_add(1);
+        }
+        Ok(json!({ "object": id, "faces": 1 }))
     }
 }

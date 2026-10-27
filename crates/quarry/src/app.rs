@@ -1133,9 +1133,22 @@ impl Quarry {
         if e.button != MouseButton::Left && !erase {
             return;
         }
+        if self.tool == Tool::Place && self.sticky && !erase && self.sticky_attach(origin, dir, cx)
+        {
+            return;
+        }
         let doc = self.reg.document();
         match self.tool {
-            Tool::Place | Tool::Block | Tool::EraseTile | Tool::FillRect => {
+            Tool::Block => {
+                if let Some(cell) = crate::viewport::tile_cell(doc, origin, dir) {
+                    self.run(
+                        "tile.block",
+                        json!({ "cells": [cell], "remove": erase }),
+                        cx,
+                    );
+                }
+            }
+            Tool::Place | Tool::EraseTile | Tool::FillRect => {
                 if let Some(cell) = crate::viewport::tile_cell(doc, origin, dir) {
                     self.tile_stroke = Some(vec![cell]);
                     if erase || self.tool == Tool::EraseTile {
@@ -1385,6 +1398,47 @@ impl Quarry {
             }),
             cx,
         );
+    }
+
+    /// Sticky placement: a click within 0.3 m of an edge of a tile in the
+    /// Tiles object stands a tile on that edge. True when it did.
+    fn sticky_attach(
+        &mut self,
+        origin: glam::Vec3,
+        dir: glam::Vec3,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let doc = self.reg.document();
+        let Some((id, face, hit)) = crate::viewport::pick(doc, origin, dir) else {
+            return false;
+        };
+        let Some(o) = doc.objects.get(id).filter(|o| o.name == "Tiles") else {
+            return false;
+        };
+        let Some(mesh) = o.mesh.as_deref() else {
+            return false;
+        };
+        let world = doc.world_matrix(o);
+        let c = &mesh.faces[face as usize].corners;
+        let near = (0..c.len())
+            .map(|k| {
+                let (a, b) = (c[k].vertex, c[(k + 1) % c.len()].vertex);
+                let (pa, pb) = (
+                    world.transform_point3(mesh.positions[a as usize]),
+                    world.transform_point3(mesh.positions[b as usize]),
+                );
+                let t = ((hit - pa).dot(pb - pa) / (pb - pa).length_squared().max(1e-9))
+                    .clamp(0.0, 1.0);
+                (hit.distance(pa + (pb - pa) * t), [a, b])
+            })
+            .min_by(|x, y| x.0.total_cmp(&y.0));
+        match near {
+            Some((d, edge)) if d < 0.3 => {
+                self.run("tile.attach", json!({ "face": face, "edge": edge }), cx);
+                true
+            }
+            _ => false,
+        }
     }
 
     /// The selected timeline key, for the curve row.

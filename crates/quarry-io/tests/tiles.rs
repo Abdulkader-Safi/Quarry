@@ -276,3 +276,73 @@ fn count_after(r: &CommandRegistry, n: u32) -> usize {
         .filter(|f| f.tile == Some(n))
         .count()
 }
+
+#[test]
+fn blocks_share_corners_and_walls_and_a_floor_edge_takes_a_wall() {
+    let dir = folder("block");
+    let png = dir.join("sheet.png");
+    write_tileset(&png, 64, 16);
+    let mut r = registry();
+    run(&mut r, "tile.import_tileset", json!({ "path": png }));
+    run(&mut r, "tile.brush", json!({ "tile": 2 }));
+    run(&mut r, "tile.block", json!({ "cells": [[0, 0]] }));
+    let m = tiles(r.document());
+    assert_eq!(
+        (m.faces.len(), m.positions.len()),
+        (6, 8),
+        "one cube: 6 faces on 8 corners"
+    );
+    run(&mut r, "tile.block", json!({ "cells": [[1, 0]] }));
+    let m = tiles(r.document());
+    assert_eq!(
+        (m.faces.len(), m.positions.len()),
+        (10, 12),
+        "the shared wall goes"
+    );
+    run(
+        &mut r,
+        "tile.block",
+        json!({ "cells": [[0, 0]], "remove": true }),
+    );
+    let m = tiles(r.document());
+    assert_eq!(
+        (m.faces.len(), m.positions.len()),
+        (6, 8),
+        "the other cube is whole again"
+    );
+    // Removing where there is no block changes nothing.
+    run(
+        &mut r,
+        "tile.block",
+        json!({ "cells": [[5, 5]], "remove": true }),
+    );
+    assert_eq!(tiles(r.document()).faces.len(), 6);
+
+    // Sticky: a wall on a floor tile's edge, square to it, facing the floor.
+    run(&mut r, "tile.place", json!({ "cells": [[0, 3]] }));
+    let m = tiles(r.document());
+    let floor = m.faces.len() - 1;
+    let c = &m.faces[floor].corners;
+    let edge = [c[0].vertex, c[1].vertex];
+    run(
+        &mut r,
+        "tile.attach",
+        json!({ "face": floor, "edge": edge }),
+    );
+    let m = tiles(r.document());
+    let wall = m.faces.len() - 1;
+    let floor_n = face_normal(m, floor);
+    let wall_n = face_normal(m, wall);
+    assert!(floor_n.dot(wall_n).abs() < 1e-4, "square to the floor");
+    let mid = |f: usize| {
+        let c = &m.faces[f].corners;
+        c.iter()
+            .map(|k| m.positions[k.vertex as usize])
+            .sum::<Vec3>()
+            / c.len() as f32
+    };
+    assert!(
+        wall_n.dot(mid(floor) - mid(wall)) > 0.0,
+        "the wall faces the floor"
+    );
+}

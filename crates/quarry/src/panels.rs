@@ -724,6 +724,31 @@ impl Quarry {
     /// Open a linked image in the external editor. The path comes from the
     /// project file, so it is checked first: it must be an existing image file,
     /// and it goes to the opener as one absolute argument, never through a shell.
+    /// Settings: pick the app "Open in image editor" uses.
+    pub fn choose_editor(&mut self, cx: &mut Context<Self>) {
+        // An .app on macOS is a folder.
+        let paths = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: cfg!(target_os = "macos"),
+            multiple: false,
+            prompt: Some("Use this editor".into()),
+        });
+        cx.spawn(async move |this, cx| {
+            if let Ok(Ok(Some(paths))) = paths.await
+                && let Some(path) = paths.into_iter().next()
+            {
+                let _ = this.update(cx, |this, cx| {
+                    this.settings.external_editor = Some(path.display().to_string());
+                    if let Some(dirs) = &this.dirs {
+                        let _ = this.settings.save(dirs);
+                    }
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
     pub fn open_external(&mut self, path: &str) {
         let Some(file) = safe_image_path(path) else {
             self.flash(format!("{path} is not an image file Quarry can open."));
@@ -738,16 +763,14 @@ impl Quarry {
             }
             c
         };
-        #[cfg(target_os = "windows")]
-        let mut cmd = {
-            let _ = &app;
-            std::process::Command::new("explorer.exe")
-        };
-        #[cfg(all(unix, not(target_os = "macos")))]
-        let mut cmd = {
-            let _ = &app;
-            std::process::Command::new("xdg-open")
-        };
+        // The chosen editor runs directly with the file as its only argument,
+        // never through a shell; otherwise the system's default opener.
+        #[cfg(not(target_os = "macos"))]
+        let mut cmd = std::process::Command::new(app.as_deref().unwrap_or(if cfg!(windows) {
+            "explorer.exe"
+        } else {
+            "xdg-open"
+        }));
         if let Err(e) = cmd.arg(&file).spawn() {
             self.flash(format!("Could not open {path}: {e}"));
         }
@@ -1271,6 +1294,7 @@ impl Quarry {
                 .enumerate()
             {
                 let id = image.id;
+                let src = image.source_path.clone();
                 list = list.child(
                     tree_row(
                         ("tex", i),
@@ -1282,6 +1306,15 @@ impl Quarry {
                         self.paint_image == Some(id),
                         false,
                     )
+                    // FR-ART-05: linked textures open in the editor set in Settings.
+                    .when_some(src, |row, path| {
+                        row.child(
+                            icon_button(("tex-open", i), "link", false, "Open in image editor", "")
+                                .on_click(
+                                    cx.listener(move |this, _, _, _| this.open_external(&path)),
+                                ),
+                        )
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.paint_image = Some(id);
                         cx.notify();
