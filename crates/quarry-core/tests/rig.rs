@@ -444,3 +444,67 @@ fn editing_the_rest_pose_keeps_keys_and_reset_returns_to_rest() {
         "the rest edit stays"
     );
 }
+
+#[test]
+fn auto_rigs_fit_bind_walk_and_undo_in_one_step() {
+    let mut r = CommandRegistry::new();
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "box", "name": "Hero", "size": [0.6, 1.8, 0.3], "position": [2, 0.9, 0] }),
+    );
+    let reply = run(
+        &mut r,
+        "rig.biped_auto",
+        json!({ "object": "Hero", "walk": true }),
+    );
+    assert_eq!(
+        (reply["bones"].as_u64(), reply["arms"].as_str()),
+        (Some(15), Some("down"))
+    );
+    let doc = r.document();
+    let s = doc.skeletons.iter().next().unwrap();
+    for name in ["hips", "head", "upper_arm.L", "hand.R", "thigh.L", "shin.R"] {
+        assert!(s.index(name).is_some(), "{name}");
+    }
+    assert_eq!(s.ik_chains.len(), 2);
+    let hero = doc.objects.by_name("Hero").unwrap();
+    assert!(hero.skin.is_some());
+    assert!(doc.clips.iter().any(|c| c.name == "walk"));
+    // The head bone sits at the top of the mesh, centred on it.
+    let head = &s.bones[s.index("head").unwrap() as usize];
+    assert!((head.tail - Vec3::new(2.0, 1.8, 0.0)).length() < 1e-3);
+    run(
+        &mut r,
+        "anim.playhead",
+        json!({ "clip": "walk", "time": 0.25 }),
+    );
+    run(&mut r, "history.undo", json!({}));
+    assert!(
+        r.document().skeletons.is_empty(),
+        "one undo removes the whole rig"
+    );
+    assert!(r.document().clips.is_empty());
+
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "box", "name": "Dog", "size": [0.5, 0.8, 1.6], "position": [0, 0.4, 3] }),
+    );
+    let reply = run(
+        &mut r,
+        "rig.quadruped_auto",
+        json!({ "object": "Dog", "walk": true }),
+    );
+    assert_eq!(reply["bones"], 14);
+    assert_eq!(
+        r.document()
+            .skeletons
+            .iter()
+            .next()
+            .unwrap()
+            .ik_chains
+            .len(),
+        4
+    );
+}

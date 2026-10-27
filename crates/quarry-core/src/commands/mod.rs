@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 mod anim;
 mod art;
+mod autorig;
 mod export;
 mod mesh;
 mod meshtools;
@@ -36,6 +37,7 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     rig::register(r);
     anim::register(r);
     vertexcolor::register(r);
+    autorig::register(r);
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
     r.register::<ProjectRecover>();

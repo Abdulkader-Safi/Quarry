@@ -21,7 +21,7 @@ Quarry is a low-poly modeler and level builder. Every tool you call edits the sa
 2. Block out with `mesh.add_primitive` (it lands on the 3D crosshair, `view.cursor`) or tiles: `tile.import_tileset`, `tile.brush`, `tile.plane`, `tile.place`, `tile.fill_rect`.
 3. Edit through the selection: `select.mode` (object, vertex, edge, face), then `select.by_ids`, `select.by_normal` or `select.box`, then `mesh.transform`, `mesh.extrude`, `mesh.merge` and the rest.
 4. Texture: `paint.texture_new` on the selected faces, `uv.unwrap`, then `paint.pixels`, `paint.rect`, `paint.fill` or `paint.stroke_3d`. With palette lock on, colours snap to the active palette.
-5. Rig: `rig.skeleton_new`, `rig.bone_add` (chain bones with `parent`), `rig.bind_auto`, fix with `rig.weight_paint`, add IK with `rig.ik_add`.
+5. Rig: `rig.skeleton_new`, `rig.bone_add` (chain bones with `parent`), `rig.bind_auto`, fix with `rig.weight_paint`, add IK with `rig.ik_add`. For a humanoid or four-legged mesh, `rig.biped_auto` or `rig.quadruped_auto` does all of that in one step (and `walk: true` adds a walk clip to start from).
 6. Animate: `anim.clip_new` per clip (idle, walk), then `anim.key_set` per bone and time, or turn on `anim.autokey` and pose with `rig.pose` and `rig.ik_set` at `anim.playhead` times.
 7. Check: take `view.screenshot` from `front`, `side` and `iso` after every major step and look at them before going on.
 8. Export: `export.run` with a path inside the project folder. One `.glb` holds meshes, textures, the skeleton and every clip. Read its report.

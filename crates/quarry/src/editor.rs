@@ -271,6 +271,8 @@ impl Quarry {
             ],
             "Rig" => vec![
                 ("New skeleton", "rig.skeleton_new"),
+                ("Auto-rig biped with walk", "@biped"),
+                ("Auto-rig quadruped with walk", "@quadruped"),
                 ("Add bone", "rig.bone_add"),
                 ("Auto weights", "rig.bind_auto"),
                 ("Mirror bones", "rig.mirror_bones"),
@@ -338,6 +340,34 @@ impl Quarry {
                         "Sprite sheet: {}",
                         v["path"].as_str().unwrap_or("")
                     ));
+                }
+            }
+            kind @ ("@biped" | "@quadruped") => {
+                let object = self
+                    .reg
+                    .document()
+                    .selection
+                    .objects
+                    .iter()
+                    .next()
+                    .map(|id| id.to_string());
+                match object {
+                    Some(object) => {
+                        let name = if kind == "@biped" {
+                            "rig.biped_auto"
+                        } else {
+                            "rig.quadruped_auto"
+                        };
+                        if let Some(v) =
+                            self.run(name, json!({ "object": object, "walk": true }), cx)
+                        {
+                            self.flash(format!(
+                                "Rigged with {} bones and a walk clip",
+                                v["bones"].as_u64().unwrap_or(0)
+                            ));
+                        }
+                    }
+                    None => self.flash("Select the mesh to rig first."),
                 }
             }
             "@dup-mirror" => {
