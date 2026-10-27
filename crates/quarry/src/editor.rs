@@ -334,8 +334,7 @@ impl Quarry {
             if Some(i) == split {
                 d = d.child(div().w(px(20.0)).h(px(1.0)).bg(p.border_subtle));
             }
-            let on = self.tool == tool
-                || (tool == Tool::Snap && self.reg.document().settings.grid_step > 0.0 && false);
+            let on = self.tool == tool || (tool == Tool::Snap && self.snap);
             d = d.child(
                 icon_button(("tool", i), icon_name, on, tip, key)
                     .on_click(cx.listener(move |this, _, _, cx| this.pick_tool(tool, cx))),
@@ -394,16 +393,13 @@ impl Quarry {
                 self.run("tile.plane", json!({ "axis": next }), cx);
             }
             Tool::Snap => {
-                let snap = self.reg.document().settings.grid_step;
-                let next = if snap >= 1.0 {
-                    0.5
-                } else if snap >= 0.5 {
-                    0.25
+                self.snap = !self.snap;
+                let step = fmt_num(self.reg.document().settings.grid_step);
+                self.flash(if self.snap {
+                    format!("Snap on: {step} m, 15°, 0.1×. Hold Shift to drag freely.")
                 } else {
-                    1.0
-                };
-                self.run("project.set_settings", json!({ "grid_step": next }), cx);
-                self.flash(format!("Snap {next} m"));
+                    "Snap off: drags are smooth. Hold Shift to snap.".to_string()
+                });
             }
             other => self.tool = other,
         }
@@ -457,6 +453,23 @@ impl Quarry {
             }
             _ => None,
         };
+        if let Some((kind, handles)) = self.gizmo() {
+            let active = self.gizmo_drag.as_ref().map(|d| d.axis);
+            v = v.child(crate::gizmo::paint(handles, kind, active));
+            if let Some(d) = &self.gizmo_drag
+                && let Some(amount) = d.applied
+            {
+                let o = self.view.bounds.get().origin;
+                let at = handles[0].from;
+                v = v.child(
+                    div()
+                        .absolute()
+                        .left(at.x - o.x + px(12.0))
+                        .top(at.y - o.y + px(12.0))
+                        .child(tooltip(d.label(amount), "")),
+                );
+            }
+        }
         if let Some((a, b, _)) = self.box_drag {
             let o = self.view.bounds.get().origin;
             let (x0, y0) = (a.x.min(b.x) - o.x, a.y.min(b.y) - o.y);
@@ -487,14 +500,16 @@ impl Quarry {
                     .flex()
                     .gap(px(8.0))
                     .children(top_left)
-                    .child(toolbar),
+                    .child(toolbar)
+                    .map(shield),
             );
             v = v.child(
                 div()
                     .absolute()
                     .top(px(12.0))
                     .right(px(12.0))
-                    .child(self.presets(cx)),
+                    .child(self.presets(cx))
+                    .map(shield),
             );
         }
         v = v.child(
@@ -502,14 +517,16 @@ impl Quarry {
                 .absolute()
                 .bottom(px(12.0))
                 .left(px(12.0))
-                .child(self.hint_bar()),
+                .child(self.hint_bar())
+                .map(shield),
         );
         v = v.child(
             div()
                 .absolute()
                 .bottom(px(12.0))
                 .right(px(12.0))
-                .child(axis_gizmo(&self.view.camera)),
+                .child(axis_gizmo(&self.view.camera))
+                .map(shield),
         );
         if let Some(cmd) = self.agent_running.clone() {
             v = v.child(
@@ -520,7 +537,7 @@ impl Quarry {
                     .right_0()
                     .flex()
                     .justify_center()
-                    .child(self.agent_banner(cmd, cx)),
+                    .child(self.agent_banner(cmd, cx).map(shield)),
             );
         }
         if self.reg.document().objects.is_empty() {
@@ -547,6 +564,7 @@ impl Quarry {
                                 div()
                                     .flex()
                                     .gap(px(8.0))
+                                    .map(shield)
                                     .child(button("empty-box", ButtonStyle::Secondary, "Add a box", Some("cube")).on_click(cx.listener(|this, _, _, cx| {
                                         this.run("mesh.add_primitive", json!({ "kind": "box" }), cx);
                                         this.set_side(SideTab::Scene, cx);
@@ -615,37 +633,49 @@ impl Quarry {
                     }),
                 ),
             )
-            .child(item(
-                "vt-move",
-                "select-box",
-                false,
-                "Move · drag the Position fields",
-                "G",
-            ))
-            .child(item(
-                "vt-rotate",
-                "rotate",
-                false,
-                "Rotate · drag the Rotation fields",
-                "R",
-            ))
-            .child(item(
-                "vt-scale",
-                "scale",
-                false,
-                "Scale · drag the Scale fields",
-                "S",
-            ))
-            .child(divider_v(20.0))
             .child(
                 item(
-                    "vt-snap",
-                    "magnet",
-                    self.reg.document().settings.grid_step > 0.0,
-                    "Snap to grid",
-                    "N",
+                    "vt-move",
+                    "move",
+                    tool == Tool::Translate,
+                    "Move · drag a handle",
+                    "G",
                 )
-                .on_click(cx.listener(|this, _, _, cx| this.pick_tool(Tool::Snap, cx))),
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.tool = Tool::Translate;
+                    cx.notify();
+                })),
+            )
+            .child(
+                item(
+                    "vt-rotate",
+                    "rotate",
+                    tool == Tool::Spin,
+                    "Rotate · drag a handle",
+                    "R",
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.tool = Tool::Spin;
+                    cx.notify();
+                })),
+            )
+            .child(
+                item(
+                    "vt-scale",
+                    "scale",
+                    tool == Tool::Grow,
+                    "Scale · drag a handle",
+                    "T",
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.tool = Tool::Grow;
+                    cx.notify();
+                })),
+            )
+            .child(divider_v(20.0))
+            .child(
+                item("vt-snap", "magnet", self.snap, "Snap to grid", "N")
+                    .on_click(cx.listener(|this, _, _, cx| this.pick_tool(Tool::Snap, cx))),
             )
             .child(
                 item("vt-grid", "sidebar-left", d.grid, "Grid", "⇧G")
@@ -837,9 +867,13 @@ impl Quarry {
         let middle = match &self.agent_running {
             Some(cmd) => format!("{file}   ·   agent: {cmd}"),
             None => format!(
-                "{file}   ·   {}   ·   snap {} m",
+                "{file}   ·   {}   ·   {}",
                 tool_name(self.tool),
-                fmt_num(doc.settings.grid_step)
+                if self.snap {
+                    format!("snap {} m", fmt_num(doc.settings.grid_step))
+                } else {
+                    "snap off".to_string()
+                }
             ),
         };
         let notice = self.notice.as_ref().map(|(m, _)| m.clone());
@@ -921,6 +955,14 @@ impl Quarry {
             .appearance(false)
             .into_any_element()
     }
+}
+
+/// Floating bars over the view keep their clicks: without this a click on a
+/// toolbar button also reaches the view underneath and changes the selection.
+fn shield(d: Div) -> Div {
+    d.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+        .on_mouse_down(MouseButton::Middle, |_, _, cx| cx.stop_propagation())
 }
 
 /// The small X/Y/Z gizmo in the corner, turning with the camera.

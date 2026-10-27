@@ -32,7 +32,7 @@ cargo run -p quarry --release                       # the editor, on the start s
 cargo run -p quarry --release -- scene.quarry       # open a project straight away
 ```
 
-Try the sample robot from the start screen (13 bones, idle and walk clips), or the sample tileset. In the view: Alt-drag or middle-drag orbits, Shift pans, scroll zooms, F frames everything, 1 to 4 switch object, vertex, edge and face selection, E extrudes, ⌘K searches every command, ⌘Z undoes.
+Try the sample robot from the start screen (13 bones, idle and walk clips), or the sample tileset. In the view: Alt-drag or middle-drag orbits, Shift pans, scroll zooms, F frames everything, 1 to 4 switch object, vertex, edge and face selection, G, R and T pick the move, rotate and scale gizmo (the magnet turns snapping on, Shift flips it), E extrudes, ⌘K searches every command, ⌘Z undoes.
 
 `QUARRY_UI="side=rig;bottom=timeline;overlay=export"` opens panels at launch, for screenshots and demos.
 

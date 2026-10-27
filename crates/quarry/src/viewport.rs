@@ -131,6 +131,20 @@ impl Viewport {
         (near, (far - near).normalize())
     }
 
+    /// A world point to window coordinates, or None behind the camera.
+    pub fn project(&self, p: Vec3) -> Option<Point<Pixels>> {
+        let b = self.bounds.get();
+        let c = self.camera.view_proj(self.aspect()) * p.extend(1.0);
+        if c.w <= 1e-5 {
+            return None;
+        }
+        let n = c.xyz() / c.w;
+        Some(point(
+            b.origin.x + px((n.x * 0.5 + 0.5) * f32::from(b.size.width)),
+            b.origin.y + px((0.5 - n.y * 0.5) * f32::from(b.size.height)),
+        ))
+    }
+
     /// Orbit (or pan with `pan`) by a mouse delta in logical pixels.
     pub fn drag_by(&mut self, delta: Point<Pixels>, pan: bool) {
         let (dx, dy) = (f32::from(delta.x), f32::from(delta.y));

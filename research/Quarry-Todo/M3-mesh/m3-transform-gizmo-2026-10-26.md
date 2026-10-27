@@ -1,11 +1,11 @@
 ---
 id: "m3-transform-gizmo-2026-10-26"
-status: "todo"
+status: "review"
 priority: "high"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-27T00:50:00.000Z"
+modified: "2026-10-27T12:00:00.000Z"
 labels: ["m3", "mesh", "ui"]
 order: 32
 ---
@@ -30,3 +30,6 @@ FR-MESH-03, using `transform-gizmo` 0.11.0 core.
 - `mesh.transform(translate?, rotate? (Euler degrees XYZ), scale?, pivot: median|cursor|origins)`: objects in object mode (parents respected), selected elements otherwise, in world space.
 - Tested: a typed 0.5 move on Y raises the selection bounds by exactly 0.5; a typed 45 degree Y rotation lands on 45.
 - Left: the transform-gizmo 0.11 viewport gizmo, snapping increments and local space switch (UI), status bar snap readout.
+
+**UI (2026-10-27)**
+Gizmo on the selection's pivot (objects, or vertices, edges and faces) in the Scene tab: move arrows (G), rotate rings (R), scale squares (T), also on the viewport toolbar. A drag applies live and lands as one undo step. Smooth by default; the magnet turns on snapping to the grid step, 15° and 0.1×, and Shift flips it for one drag. Checked with real mouse events: a move of 1 m and a rotate in 15° steps.

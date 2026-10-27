@@ -94,6 +94,10 @@ pub enum Tool {
     Ik,
     WeightsView,
     Pose,
+    // Transform gizmo
+    Translate,
+    Spin,
+    Grow,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -211,6 +215,9 @@ pub struct Quarry {
     /// Box select in the view: start and current corner, window coordinates.
     pub box_drag: Option<(Point<Pixels>, Point<Pixels>, bool)>,
     pub key_drag: Option<KeyDrag>,
+    pub gizmo_drag: Option<crate::gizmo::Drag>,
+    /// The magnet: gizmo drags snap to the grid, 15° and 0.1×. Off is smooth.
+    pub snap: bool,
     paint_stroke: Option<Vec<[f32; 3]>>,
     pub export_selected: bool,
     pub export_scale: f32,
@@ -338,6 +345,8 @@ impl Quarry {
             tile_stroke: None,
             box_drag: None,
             key_drag: None,
+            gizmo_drag: None,
+            snap: false,
             paint_stroke: None,
             export_selected: false,
             export_scale: 1.0,
@@ -937,6 +946,14 @@ impl Quarry {
             });
             return;
         }
+        if e.button == MouseButton::Left
+            && let Some((kind, handles)) = self.gizmo()
+            && let Some(h) = crate::gizmo::hit(&handles, e.position)
+        {
+            self.gizmo_drag = Some(crate::gizmo::Drag::new(kind, h, e.position));
+            cx.notify();
+            return;
+        }
         let (origin, dir) = self.view.ray(e.position);
         let erase = e.button == MouseButton::Right;
         if e.button != MouseButton::Left && !erase {
@@ -1207,12 +1224,94 @@ impl Quarry {
         } else if let Some(d) = &mut self.key_drag {
             d.dx = f32::from(e.position.x) - d.start_x;
             cx.notify();
+        } else if self.gizmo_drag.is_some() {
+            self.gizmo_move(e, cx);
         } else if self.view.drag.is_some() || self.box_drag.is_some() {
             self.view_mouse_move(e, cx);
         }
     }
 
+    /// Re-apply the dragged transform: undo the last step, apply the new total,
+    /// so the finished drag is one undo entry.
+    fn gizmo_move(&mut self, e: &MouseMoveEvent, cx: &mut Context<Self>) {
+        let Some(d) = &self.gizmo_drag else { return };
+        let grid = self.reg.document().settings.grid_step;
+        // Shift flips the magnet for this drag.
+        let free = self.snap == e.modifiers.shift;
+        let amount = d.amount(e.position, grid, free);
+        let target = (!d.is_identity(amount)).then_some(amount);
+        if target == d.applied {
+            return;
+        }
+        let args = d.args(amount);
+        if d.applied.is_some() {
+            let _ = self.reg.execute("history.undo", json!({}), Source::Human);
+        }
+        let applied = match target {
+            Some(_) => match self.reg.execute("mesh.transform", args, Source::Human) {
+                Ok(_) => target,
+                Err(err) => {
+                    self.flash(format!("mesh.transform: {}", err.message));
+                    None
+                }
+            },
+            None => None,
+        };
+        if let Some(d) = &mut self.gizmo_drag {
+            d.applied = applied;
+        }
+        cx.notify();
+    }
+
+    /// The gizmo for the current tool and selection, with its handles.
+    pub fn gizmo(&self) -> Option<(crate::gizmo::Kind, [crate::gizmo::Handle; 3])> {
+        use crate::gizmo::Kind;
+        if self.screen != Screen::Editor
+            || self.side != SideTab::Scene
+            || self.agent_running.is_some()
+            || self.animating()
+        {
+            return None;
+        }
+        let kind = match self.tool {
+            Tool::Select | Tool::Translate => Kind::Move,
+            Tool::Spin => Kind::Rotate,
+            Tool::Grow => Kind::Scale,
+            _ => return None,
+        };
+        let pivot = self.selection_pivot()?;
+        Some((kind, crate::gizmo::handles(&self.view, pivot)?))
+    }
+
+    /// The centre of what is selected, in world space.
+    pub fn selection_pivot(&self) -> Option<glam::Vec3> {
+        let doc = self.reg.document();
+        let sel = &doc.selection;
+        let points: Vec<glam::Vec3> = if sel.mode == SelectMode::Object {
+            sel.objects
+                .iter()
+                .filter_map(|id| doc.objects.get(*id))
+                .map(|o| doc.world_matrix(o).transform_point3(glam::Vec3::ZERO))
+                .collect()
+        } else {
+            let o = sel.object.and_then(|id| doc.objects.get(id))?;
+            let mesh = o.mesh.as_ref()?;
+            let world = doc.world_matrix(o);
+            sel.touched_vertices(mesh)
+                .into_iter()
+                .filter_map(|v| mesh.positions.get(v as usize))
+                .map(|p| world.transform_point3(*p))
+                .collect()
+        };
+        (!points.is_empty())
+            .then(|| points.iter().copied().sum::<glam::Vec3>() / points.len() as f32)
+    }
+
     pub fn root_mouse_up(&mut self, cx: &mut Context<Self>) {
+        if self.gizmo_drag.take().is_some() {
+            self.sync_camera_from_doc();
+            cx.notify();
+        }
         if let Some(d) = self.key_drag.take() {
             let fps = self.reg.document().settings.fps.max(1) as f32;
             let length = self.active_clip_length();
@@ -1468,6 +1567,18 @@ impl Quarry {
             (false, _, "4") => self.set_mode(SelectMode::Face, cx),
             (false, false, "e") => {
                 self.run("mesh.extrude", json!({ "distance": 1.0 }), cx);
+            }
+            (false, false, "g") => {
+                self.tool = Tool::Translate;
+                cx.notify();
+            }
+            (false, false, "r") => {
+                self.tool = Tool::Spin;
+                cx.notify();
+            }
+            (false, false, "t") => {
+                self.tool = Tool::Grow;
+                cx.notify();
             }
             (false, _, "space") => {
                 self.playing = !self.playing;

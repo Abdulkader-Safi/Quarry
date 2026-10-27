@@ -5,6 +5,7 @@ mod app;
 mod assets;
 mod dialogs;
 mod editor;
+mod gizmo;
 mod panels;
 mod start;
 mod theme;
