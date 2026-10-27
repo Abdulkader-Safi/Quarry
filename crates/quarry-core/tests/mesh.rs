@@ -256,6 +256,41 @@ fn live_mirror_moves_the_twin_and_apply_welds_the_centre() {
 }
 
 #[test]
+fn extruding_one_side_under_mirror_extrudes_the_other() {
+    let mut r = editing("box");
+    run(&mut r, "mesh.mirror_mode", json!({ "axis": "x" }));
+    run(&mut r, "select.mode", json!({ "mode": "face" }));
+    let m = mesh(r.document(), "M");
+    let width = |m: &quarry_core::model::Mesh| {
+        let xs = m.positions.iter().map(|p| p.x);
+        (
+            xs.clone().fold(f32::MIN, f32::max),
+            xs.fold(f32::MAX, f32::min),
+        )
+    };
+    let (max_x, min_x) = width(m);
+    let plus = (0..m.faces.len() as u32)
+        .find(|f| {
+            m.faces[*f as usize]
+                .corners
+                .iter()
+                .all(|c| m.positions[c.vertex as usize].x > 0.0)
+        })
+        .unwrap();
+    run(&mut r, "select.by_ids", json!({ "faces": [plus] }));
+    let reply = run(&mut r, "mesh.extrude", json!({ "distance": 0.5 }));
+    assert_eq!(reply["mirrored"], 1);
+    let m = mesh(r.document(), "M");
+    let (new_max, new_min) = width(m);
+    assert!((new_max - (max_x + 0.5)).abs() < 1e-5);
+    assert!(
+        (new_min - (min_x - 0.5)).abs() < 1e-5,
+        "the -X face went out too"
+    );
+    assert_eq!(m.faces.len(), 6 + 4 + 4, "side walls on both ends");
+}
+
+#[test]
 fn edits_need_a_selection_and_say_so() {
     let mut r = editing("box");
     let err = r

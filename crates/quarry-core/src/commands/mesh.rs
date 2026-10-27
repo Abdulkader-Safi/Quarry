@@ -264,6 +264,52 @@ impl Command for MeshExtrude {
                 .normalize_or_zero()
         });
 
+        // Live mirror: the twins of the selection extrude too, the other way
+        // across the axis. Faces or edges already selected, or their own
+        // twin (straddling the axis), are left to the main extrude.
+        let mirror = mesh.mirror.map(axis_index);
+        let twin = |mesh: &Mesh, v: u32, axis: usize| {
+            let target = mirrored(mesh.positions[v as usize], axis);
+            mesh.positions
+                .iter()
+                .position(|p| p.distance(target) < SAME)
+                .map(|t| t as u32)
+        };
+        let twin_faces: BTreeSet<u32> = match (mirror, mode) {
+            (Some(axis), SelectMode::Face) => selection
+                .faces
+                .iter()
+                .filter_map(|&f| {
+                    let mut want: Vec<u32> = mesh.faces[f as usize]
+                        .corners
+                        .iter()
+                        .map(|c| twin(mesh, c.vertex, axis))
+                        .collect::<Option<_>>()?;
+                    want.sort_unstable();
+                    let found = mesh.faces.iter().position(|g| {
+                        let mut have: Vec<u32> = g.corners.iter().map(|c| c.vertex).collect();
+                        have.sort_unstable();
+                        have == want
+                    })? as u32;
+                    (found != f && !selection.faces.contains(&found)).then_some(found)
+                })
+                .collect(),
+            _ => BTreeSet::new(),
+        };
+        let twin_edges: BTreeSet<(u32, u32)> = match (mirror, mode) {
+            (Some(axis), SelectMode::Edge) => selection
+                .edges
+                .iter()
+                .filter_map(|&(a, b)| {
+                    let (ta, tb) = (twin(mesh, a, axis)?, twin(mesh, b, axis)?);
+                    let e = (ta.min(tb), ta.max(tb));
+                    (e != (a.min(b), a.max(b)) && !selection.edges.contains(&e)).then_some(e)
+                })
+                .collect(),
+            _ => BTreeSet::new(),
+        };
+        let twin_direction = direction.zip(mirror).map(|(d, a)| mirrored(d, a));
+
         let (new_faces, new_edges) = match mode {
             SelectMode::Face => {
                 if selection.faces.is_empty() {
@@ -286,13 +332,22 @@ impl Command for MeshExtrude {
                 ));
             }
         };
+        if !twin_faces.is_empty() {
+            extrude_faces(mesh, &twin_faces, self.distance, twin_direction);
+        }
+        if !twin_edges.is_empty() {
+            extrude_edges(mesh, &twin_edges, self.distance, twin_direction);
+        }
         let sel = &mut cx.doc().selection;
         sel.object = Some(id);
         match mode {
             SelectMode::Face => sel.faces = new_faces.clone(),
             _ => sel.edges = new_edges,
         }
-        Ok(json!({ "faces": new_faces.len() }))
+        Ok(json!({
+            "faces": new_faces.len(),
+            "mirrored": twin_faces.len() + twin_edges.len(),
+        }))
     }
 }
 
