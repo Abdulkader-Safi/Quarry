@@ -607,3 +607,84 @@ fn keyed_ik_exports_as_thigh_and_shin_rotations_only() {
         }
     }
 }
+
+#[test]
+fn a_textured_box_exports_as_obj_with_its_material_and_png() {
+    let dir = folder("obj");
+    let mut r = registry();
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "box", "name": "Crate" }),
+    );
+    run(
+        &mut r,
+        "select.mode",
+        json!({ "mode": "face", "object": "Crate" }),
+    );
+    run(
+        &mut r,
+        "paint.texture_new",
+        json!({ "width": 16, "height": 16, "name": "crate wood" }),
+    );
+    let path = dir.join("crate");
+    let reply = run(
+        &mut r,
+        "export.run",
+        json!({ "path": path, "format": "obj" }),
+    );
+    assert_eq!(reply["faces"], 6);
+    let obj = std::fs::read_to_string(dir.join("crate.obj")).unwrap();
+    let count = |p: &str| obj.lines().filter(|l| l.starts_with(p)).count();
+    assert_eq!((count("v "), count("f ")), (8, 6));
+    assert_eq!(count("vt "), 24);
+    assert!(obj.contains("mtllib crate.mtl") && obj.contains("usemtl crate_wood"));
+    let mtl = std::fs::read_to_string(dir.join("crate.mtl")).unwrap();
+    assert!(mtl.contains("map_Kd crate_crate_wood.png"));
+    let png = image::open(dir.join("crate_crate_wood.png")).unwrap();
+    assert_eq!((png.width(), png.height()), (16, 16));
+    // Every face index points at a real vertex.
+    for l in obj.lines().filter(|l| l.starts_with("f ")) {
+        for c in l[2..].split(' ') {
+            let v: usize = c.split('/').next().unwrap().parse().unwrap();
+            assert!((1..=8).contains(&v));
+        }
+    }
+}
+
+#[test]
+fn an_export_preset_is_kept_in_the_project_and_reruns() {
+    let dir = folder("preset");
+    let mut r = registry();
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "box", "name": "Crate" }),
+    );
+    run(
+        &mut r,
+        "project.save_as",
+        json!({ "path": dir.join("room.quarry") }),
+    );
+    let saved = run(
+        &mut r,
+        "export.preset_save",
+        json!({ "name": "game", "path": dir.join("out/room.glb"), "scale": 2.0 }),
+    );
+    assert_eq!(
+        saved["path"], "out/room.glb",
+        "kept relative to the project"
+    );
+    std::fs::create_dir_all(dir.join("out")).unwrap();
+    let report = run(&mut r, "export.preset_run", json!({}));
+    assert_eq!(report["preset"], "game");
+    assert!(dir.join("out/room.glb").exists());
+    run(&mut r, "project.save", json!({}));
+    run(
+        &mut r,
+        "project.open",
+        json!({ "path": dir.join("room.quarry") }),
+    );
+    let presets = &r.document().export_presets;
+    assert_eq!((presets.len(), presets[0].scale), (1, 2.0));
+}

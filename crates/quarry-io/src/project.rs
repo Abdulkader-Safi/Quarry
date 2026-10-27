@@ -76,7 +76,10 @@ impl Storage for QuarryFiles {
         doc: &Document,
         request: &quarry_core::command::ExportRequest,
     ) -> Result<serde_json::Value, CommandError> {
-        crate::export::export(doc, request)
+        match request.format {
+            quarry_core::model::ExportFormat::Obj => crate::obj::export(doc, request),
+            _ => crate::export::export(doc, request),
+        }
     }
 
     fn screenshot(

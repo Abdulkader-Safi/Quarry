@@ -13,6 +13,7 @@ pub const ACTIONS: &[(&str, &str, &str, &str)] = &[
     ("project.save", "Save", "Global", "cmd+s"),
     ("project.open", "Open", "Global", "cmd+o"),
     ("export.run", "Export", "Global", "cmd+e"),
+    ("export.again", "Export again", "Global", "cmd+shift+e"),
     ("view.frame", "Frame selection", "View", "f"),
     ("cursor.forward", "Crosshair forward", "View", "w"),
     ("cursor.back", "Crosshair back", "View", "s"),

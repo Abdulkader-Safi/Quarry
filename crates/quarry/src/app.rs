@@ -253,6 +253,9 @@ pub struct Quarry {
     paint_pressure: Vec<Option<f32>>,
     pub export_selected: bool,
     pub export_scale: f32,
+    pub export_obj: bool,
+    /// Save the dialog's settings as a preset so Export again repeats them.
+    pub export_remember: bool,
     pub connect_tab: usize,
     pub settings_page: usize,
     pub basics_dont_show: bool,
@@ -387,6 +390,8 @@ impl Quarry {
             paint_pressure: Vec::new(),
             export_selected: false,
             export_scale: 1.0,
+            export_obj: false,
+            export_remember: true,
             connect_tab: 0,
             settings_page: 3,
             basics_dont_show: false,
@@ -1813,6 +1818,17 @@ impl Quarry {
                 self.overlay = Overlay::Export;
                 cx.notify();
             }
+            "export.again" => {
+                if let Some(report) = self.run("export.preset_run", json!({}), cx) {
+                    let file = report["files"]
+                        .as_array()
+                        .and_then(|f| f.last())
+                        .and_then(|f| f.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    self.flash(format!("Exported again: {file}"));
+                }
+            }
             "view.frame" => {
                 self.run("view.frame", json!({}), cx);
             }
@@ -1918,13 +1934,23 @@ impl Quarry {
             .iter()
             .map(|id| id.to_string())
             .collect();
-        let mut args = json!({ "path": path, "scale": self.export_scale });
+        let mut path = path;
+        path.set_extension(if self.export_obj { "obj" } else { "glb" });
+        let format = if self.export_obj { "obj" } else { "glb" };
+        let mut args = json!({ "path": path, "scale": self.export_scale, "format": format });
         if self.export_selected {
             args["selection"] = json!("selected");
             args["objects"] = json!(objects);
         }
-        if let Some(report) = self.run("export.run", args, cx) {
+        if let Some(report) = self.run("export.run", args.clone(), cx) {
             self.overlay = Overlay::None;
+            if self.export_remember {
+                let name = path
+                    .file_stem()
+                    .map_or("export".into(), |s| s.to_string_lossy().into_owned());
+                args["name"] = json!(name);
+                self.run("export.preset_save", args, cx);
+            }
             let warnings = report["warnings"].as_array().map_or(0, |w| w.len());
             self.flash(format!(
                 "Exported {}{}",

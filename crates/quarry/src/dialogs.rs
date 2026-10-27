@@ -438,9 +438,23 @@ impl Quarry {
                     .child(
                         div()
                             .w(px(110.0))
-                            .child(text("Preset", Type::BodyS, p.text_secondary)),
+                            .child(text("Format", Type::BodyS, p.text_secondary)),
                     )
-                    .child(select("preset", "Cairn default").flex_1()),
+                    .child(segmented(
+                        "format",
+                        &[".glb (rigged, animated)", ".obj (static)"],
+                        self.export_obj as usize,
+                        true,
+                        {
+                            let entity = cx.entity();
+                            move |i, _, cx| {
+                                entity.update(cx, |this, cx| {
+                                    this.export_obj = i == 1;
+                                    cx.notify();
+                                })
+                            }
+                        },
+                    )),
             )
             .child(
                 div()
@@ -521,6 +535,19 @@ impl Quarry {
                         markers + collision + props > 0,
                     )),
             );
+        let again =
+            crate::keys::display(crate::keys::bound(&self.settings.shortcuts, "export.again"));
+        let body = body.child(
+            checkbox(
+                "remember",
+                self.export_remember,
+                &format!("Remember these settings for Export again ({again})"),
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.export_remember = !this.export_remember;
+                cx.notify();
+            })),
+        );
         let footer = div()
             .flex()
             .items_center()

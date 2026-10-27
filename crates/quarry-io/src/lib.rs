@@ -7,6 +7,7 @@ pub mod images;
 pub mod import;
 pub mod logging;
 pub mod migrate;
+pub mod obj;
 pub mod project;
 pub mod psd;
 pub mod settings;
