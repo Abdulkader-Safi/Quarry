@@ -1243,6 +1243,24 @@ impl Quarry {
                 )
                 .into_any_element(),
         );
+        out.push(
+            button(
+                "bake-ao",
+                ButtonStyle::Secondary,
+                "Bake AO into vertex colours",
+                Some("sun"),
+            )
+            .w_full()
+            .on_click(cx.listener(|this, _, _, cx| {
+                if let Some(v) = this.run("paint.bake_ao", json!({}), cx) {
+                    this.flash(format!(
+                        "Baked AO on {} vertices",
+                        v["vertices"].as_u64().unwrap_or(0)
+                    ));
+                }
+            }))
+            .into_any_element(),
+        );
         out.push(self.header("textures", "Textures", cx));
         if self.open_section("textures") {
             let mut list = div().flex().flex_col().w_full();

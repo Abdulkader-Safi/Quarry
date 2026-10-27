@@ -187,3 +187,77 @@ fn pressure_picks_whole_pixel_brush_sizes() {
         );
     }
 }
+
+#[test]
+fn vertex_colours_paint_every_corner_on_a_vertex() {
+    let mut r = CommandRegistry::new();
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "box", "name": "M" }),
+    );
+    run(
+        &mut r,
+        "select.mode",
+        json!({ "mode": "vertex", "object": "M" }),
+    );
+    run(&mut r, "select.by_ids", json!({ "vertices": [0] }));
+    run(
+        &mut r,
+        "paint.vertex_color",
+        json!({ "rgba": [255, 0, 0, 255] }),
+    );
+    let m = r
+        .document()
+        .objects
+        .by_name("M")
+        .unwrap()
+        .mesh
+        .clone()
+        .unwrap();
+    for c in m.faces.iter().flat_map(|f| &f.corners) {
+        let red = c.color == glam::Vec4::new(1.0, 0.0, 0.0, 1.0);
+        assert_eq!(red, c.vertex == 0);
+    }
+}
+
+#[test]
+fn baked_ao_darkens_where_a_box_meets_the_floor() {
+    let mut r = CommandRegistry::new();
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "plane", "name": "Floor", "size": [4, 1, 4], "position": [0, 0, 0] }),
+    );
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "box", "name": "M", "position": [0, 0.5, 0] }),
+    );
+    run(
+        &mut r,
+        "select.mode",
+        json!({ "mode": "face", "object": "M" }),
+    );
+    let reply = run(&mut r, "paint.bake_ao", json!({ "rays": 64 }));
+    assert!(reply["darkest"].as_f64().unwrap() < 0.9);
+    let o = r.document().objects.by_name("M").unwrap();
+    let m = o.mesh.clone().unwrap();
+    let world = r.document().world_matrix(o);
+    let shade = |low: bool| {
+        let v: Vec<f32> = m
+            .faces
+            .iter()
+            .flat_map(|f| &f.corners)
+            .filter(|c| (world.transform_point3(m.positions[c.vertex as usize]).y < 0.5) == low)
+            .map(|c| c.color.x)
+            .collect();
+        v.iter().sum::<f32>() / v.len() as f32
+    };
+    assert!(
+        shade(true) < shade(false) - 0.1,
+        "bottom {} top {}",
+        shade(true),
+        shade(false)
+    );
+}

@@ -173,6 +173,9 @@ fn add_mesh(
     bounds: &mut Option<(Vec3, Vec3)>,
 ) {
     let normal_matrix = world.inverse().transpose();
+    // Vertex colours hidden by the display toggle draw white.
+    let show_colors = doc.view.display.vertex_color;
+    let shown = |c: glam::Vec4| if show_colors { c } else { glam::Vec4::ONE };
     let mirrored = world.determinant() < 0.0;
     let mut corner_normals = mesh.corner_normals(world_points);
     if mirrored {
@@ -224,7 +227,7 @@ fn add_mesh(
             normal: normals[i].into(),
             uv: [corners[i].uv.x / size[0], corners[i].uv.y / size[1]],
             color: if lit {
-                let c = corners[i].color;
+                let c = shown(corners[i].color);
                 [
                     c.x * 0.5 + ACCENT[0] * 0.5,
                     c.y * 0.5 + ACCENT[1] * 0.5,
@@ -232,7 +235,7 @@ fn add_mesh(
                     c.w,
                 ]
             } else {
-                corners[i].color.into()
+                shown(corners[i].color).into()
             },
         };
 

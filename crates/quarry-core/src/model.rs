@@ -405,7 +405,7 @@ impl Default for DisplayToggles {
         Self {
             wireframe: false,
             textured: true,
-            vertex_color: false,
+            vertex_color: true,
             weights: false,
             bones: true,
             grid: true,

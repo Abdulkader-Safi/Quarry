@@ -244,6 +244,7 @@ impl Quarry {
                 ("Iso view", "view.camera"),
                 ("Toggle wireframe", "@wireframe"),
                 ("Toggle grid", "@grid"),
+                ("Toggle vertex colours", "@vcolor"),
                 ("Light theme", "@light"),
                 ("Dark theme", "@dark"),
             ],
@@ -314,6 +315,7 @@ impl Quarry {
         match action {
             "@wireframe" => self.display("wireframe", cx),
             "@grid" => self.display("grid", cx),
+            "@vcolor" => self.display("vertex_color", cx),
             "@light" => self.set_theme(true, cx),
             "@dark" => self.set_theme(false, cx),
             "@play" => self.playing = !self.playing,

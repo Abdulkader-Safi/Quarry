@@ -21,6 +21,7 @@ mod scene;
 mod select;
 mod tile;
 mod uv;
+mod vertexcolor;
 
 pub(crate) fn register_all(r: &mut CommandRegistry) {
     tile::register(r);
@@ -34,6 +35,7 @@ pub(crate) fn register_all(r: &mut CommandRegistry) {
     paint::register(r);
     rig::register(r);
     anim::register(r);
+    vertexcolor::register(r);
     r.register::<ProjectNew>();
     r.register::<ProjectOpen>();
     r.register::<ProjectRecover>();

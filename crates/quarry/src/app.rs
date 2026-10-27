@@ -1043,6 +1043,7 @@ impl Quarry {
             "wireframe" => d.wireframe,
             "grid" => d.grid,
             "textured" => d.textured,
+            "vertex_color" => d.vertex_color,
             "weights" => d.weights,
             "bones" => d.bones,
             _ => return,
@@ -1223,7 +1224,18 @@ impl Quarry {
                 self.select_at(origin, dir, add, cx);
             }
         }
-        if let Some(points) = self.paint_stroke.take() {
+        if self.tool == Tool::VertexColor
+            && let Some(points) = self.paint_stroke.take()
+        {
+            // Vertex colour: vertices near the stroke take the colour.
+            self.paint_pressure.clear();
+            let radius = 0.1 * self.brush_px.max(1) as f32;
+            self.run(
+                "paint.vertex_color",
+                json!({ "points": points, "rgba": self.paint_rgba, "radius": radius }),
+                cx,
+            );
+        } else if let Some(points) = self.paint_stroke.take() {
             let rgba = if self.tool == Tool::Eraser {
                 [0, 0, 0, 0]
             } else {
@@ -1232,7 +1244,7 @@ impl Quarry {
             let mut args = json!({ "points": points, "rgba": rgba, "size": self.brush_px });
             // Pressure only when the whole stroke came from a pen.
             let pressures: Option<Vec<f32>> = self.paint_pressure.drain(..).collect();
-            if let Some(pressures) = pressures {
+            if let Some(pressures) = pressures.filter(|_| self.pressure) {
                 args["pressures"] = json!(pressures);
             }
             self.run("paint.stroke_3d", args, cx);
