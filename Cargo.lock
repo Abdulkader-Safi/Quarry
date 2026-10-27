@@ -5155,6 +5155,7 @@ dependencies = [
 name = "quarry-server"
 version = "0.1.0"
 dependencies = [
+ "image",
  "interprocess",
  "libc",
  "quarry-core",

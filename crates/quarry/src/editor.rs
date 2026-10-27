@@ -229,6 +229,7 @@ impl Quarry {
                 ("Save", "project.save"),
                 ("Import .glb or .gltf…", "import.gltf"),
                 ("Export…", "export.run"),
+                ("Export sprite sheet", "@sheet"),
             ],
             "Edit" => vec![
                 ("Undo", "history.undo"),
@@ -321,6 +322,24 @@ impl Quarry {
             "@light" => self.set_theme(true, cx),
             "@dark" => self.set_theme(false, cx),
             "@play" => self.playing = !self.playing,
+            "@sheet" => {
+                let mut path = self.default_export_path();
+                path.set_file_name(format!(
+                    "{}-sheet.png",
+                    path.file_stem()
+                        .map_or("export".into(), |s| s.to_string_lossy())
+                ));
+                let mut args = json!({ "path": path });
+                if let Some(clip) = self.active_clip_name() {
+                    args["clip"] = json!(clip);
+                }
+                if let Some(v) = self.run("export.sprite_sheet", args, cx) {
+                    self.flash(format!(
+                        "Sprite sheet: {}",
+                        v["path"].as_str().unwrap_or("")
+                    ));
+                }
+            }
             "@dup-mirror" => {
                 self.run("scene.duplicate", json!({ "mirror": "x" }), cx);
             }

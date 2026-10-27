@@ -16,6 +16,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
     r.register::<ExportPresetSave>();
     r.register::<ExportPresetRun>();
     r.register::<ExportPresetDelete>();
+    r.register::<ExportSpriteSheet>();
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -279,5 +280,88 @@ impl Command for ExportPresetDelete {
             )));
         }
         Ok(serde_json::json!({ "deleted": self.name }))
+    }
+}
+
+// ---- sprite sheet (FR-EXP-07) ----------------------------------------------
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ExportSpriteSheet {
+    /// The PNG to write; `.png` is added if missing.
+    pub path: PathBuf,
+    /// Play this clip across the frames. Default none (the current pose).
+    pub clip: Option<String>,
+    /// Turn the camera a full circle across the frames. Default true without
+    /// a clip, false with one.
+    pub turntable: Option<bool>,
+    /// Frames, 1 to 64. Default 8.
+    pub frames: Option<u32>,
+    /// Pixels per frame (square), 16 to 1024. Default 128.
+    pub size: Option<u32>,
+    /// Camera: front, side, top or iso, framed on the scene. Default iso.
+    pub preset: Option<crate::camera::Preset>,
+}
+
+impl Command for ExportSpriteSheet {
+    const NAME: &'static str = "export.sprite_sheet";
+    const DESCRIPTION: &'static str = "Render frames side by side into one PNG: a turntable (the camera circles the scene) and/or a clip played from start to end. Frame i is the i-th step, left to right.";
+    const LONG: bool = true;
+    const UNDOABLE: bool = false;
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let frames = self.frames.unwrap_or(8);
+        let size = self.size.unwrap_or(128);
+        if !(1..=64).contains(&frames) || !(16..=1024).contains(&size) {
+            return Err(CommandError::new(
+                ErrorCode::OutOfBounds,
+                "frames must be 1 to 64 and size 16 to 1024 pixels.",
+            ));
+        }
+        let doc = cx.state.doc.clone();
+        let clip = match &self.clip {
+            Some(c) => Some(
+                doc.clips
+                    .iter()
+                    .find(|k| &k.name == c || k.id.to_string() == *c)
+                    .cloned()
+                    .ok_or_else(|| CommandError::not_found(format!("No clip called '{c}'.")))?,
+            ),
+            None => None,
+        };
+        let turntable = self.turntable.unwrap_or(clip.is_none());
+        let mut camera =
+            crate::camera::OrbitCamera::preset(self.preset.unwrap_or(crate::camera::Preset::Iso));
+        if let Some((lo, hi)) = doc.bounds(doc.objects.iter().filter(|o| o.visible)) {
+            camera.frame(lo, hi);
+        }
+        let mut pngs = Vec::new();
+        for i in 0..frames {
+            let step = i as f32 / frames as f32;
+            let mut posed = doc.clone();
+            if let Some(c) = &clip
+                && let Some(s) = posed.skeletons.get_mut(c.skeleton)
+            {
+                // Looping clips spread frames over the loop; others end on the last frame.
+                let t = if c.looping || frames == 1 {
+                    step * c.length
+                } else {
+                    i as f32 / (frames - 1) as f32 * c.length
+                };
+                s.pose = c.pose_at(s, t).pose;
+            }
+            let mut cam = camera;
+            if turntable {
+                cam.yaw += step * std::f32::consts::TAU;
+            }
+            pngs.push(cx.storage()?.screenshot(&posed, &cam, size, size)?);
+            cx.step((i + 1) as f32 / frames as f32)?;
+        }
+        let mut path = self.path;
+        if path.extension().is_none_or(|e| e != "png") {
+            path.as_mut_os_string().push(".png");
+        }
+        let (w, h) = cx.storage()?.write_sheet(&pngs, &path)?;
+        Ok(serde_json::json!({ "path": path, "frames": frames, "width": w, "height": h }))
     }
 }

@@ -82,6 +82,34 @@ impl Storage for QuarryFiles {
         }
     }
 
+    fn write_sheet(&self, frames: &[Vec<u8>], path: &Path) -> Result<(u32, u32), CommandError> {
+        let fail = |why: String| {
+            CommandError::new(
+                quarry_core::ErrorCode::Io,
+                format!("Could not write {}: {why}.", path.display()),
+            )
+        };
+        let images: Vec<image::RgbaImage> = frames
+            .iter()
+            .map(|f| image::load_from_memory(f).map(|i| i.to_rgba8()))
+            .collect::<Result<_, _>>()
+            .map_err(|e| fail(e.to_string()))?;
+        let (w, h) = images.first().map_or((0, 0), |i| i.dimensions());
+        let mut sheet = image::RgbaImage::new(w * images.len() as u32, h);
+        for (i, frame) in images.iter().enumerate() {
+            image::imageops::replace(&mut sheet, frame, (i as u32 * w) as i64, 0);
+        }
+        let mut bytes = Vec::new();
+        sheet
+            .write_to(
+                &mut std::io::Cursor::new(&mut bytes),
+                image::ImageFormat::Png,
+            )
+            .map_err(|e| fail(e.to_string()))?;
+        crate::settings::write_atomic(path, &bytes).map_err(|e| fail(e.to_string()))?;
+        Ok(sheet.dimensions())
+    }
+
     fn screenshot(
         &self,
         doc: &Document,
