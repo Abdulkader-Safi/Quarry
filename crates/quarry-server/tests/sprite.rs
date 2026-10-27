@@ -47,5 +47,14 @@ fn a_turntable_is_eight_frames_in_a_row_starting_from_the_preset() {
     );
     let one = image::open(dir.join("one.png")).unwrap().to_rgba8();
     assert_eq!(frame(0), one, "frame 0 is the preset view");
+    run(
+        &mut r,
+        "export.sprite_sheet",
+        json!({ "path": dir.join("spin.gif"), "size": 32 }),
+    );
+    let gif = std::fs::File::open(dir.join("spin.gif")).unwrap();
+    let decoder = image::codecs::gif::GifDecoder::new(std::io::BufReader::new(gif)).unwrap();
+    use image::AnimationDecoder;
+    assert_eq!(decoder.into_frames().count(), 8, "an 8-frame GIF");
     let _ = std::fs::remove_dir_all(&dir);
 }

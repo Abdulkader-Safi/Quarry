@@ -88,8 +88,9 @@ pub trait Storage: Send + Sync {
     fn export(&self, doc: &Document, request: &ExportRequest) -> Result<Value, CommandError>;
     /// Read a .gltf or .glb as a document fragment to merge in.
     fn import_gltf(&self, path: &Path) -> Result<Document, CommandError>;
-    /// Lay PNG frames side by side, in order, into one PNG at `path`;
-    /// returns its width and height.
+    /// Lay PNG frames side by side, in order, into one PNG at `path`, or
+    /// write them as an animated GIF when `path` ends in `.gif`; returns the
+    /// image's width and height.
     fn write_sheet(&self, frames: &[Vec<u8>], path: &Path) -> Result<(u32, u32), CommandError>;
     /// Render the document from `camera` to a PNG of `width` x `height`.
     fn screenshot(

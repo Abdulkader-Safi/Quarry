@@ -95,6 +95,22 @@ impl Storage for QuarryFiles {
             .collect::<Result<_, _>>()
             .map_err(|e| fail(e.to_string()))?;
         let (w, h) = images.first().map_or((0, 0), |i| i.dimensions());
+        if path.extension().is_some_and(|e| e == "gif") {
+            // An animated GIF at 8 frames a second, looping.
+            let mut bytes = Vec::new();
+            {
+                let mut gif = image::codecs::gif::GifEncoder::new(&mut bytes);
+                gif.set_repeat(image::codecs::gif::Repeat::Infinite)
+                    .map_err(|e| fail(e.to_string()))?;
+                let delay = image::Delay::from_numer_denom_ms(125, 1);
+                for frame in images {
+                    gif.encode_frame(image::Frame::from_parts(frame, 0, 0, delay))
+                        .map_err(|e| fail(e.to_string()))?;
+                }
+            }
+            crate::settings::write_atomic(path, &bytes).map_err(|e| fail(e.to_string()))?;
+            return Ok((w, h));
+        }
         let mut sheet = image::RgbaImage::new(w * images.len() as u32, h);
         for (i, frame) in images.iter().enumerate() {
             image::imageops::replace(&mut sheet, frame, (i as u32 * w) as i64, 0);

@@ -288,7 +288,8 @@ impl Command for ExportPresetDelete {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ExportSpriteSheet {
-    /// The PNG to write; `.png` is added if missing.
+    /// The file to write: a `.gif` path makes an animated GIF, anything else a
+    /// PNG sheet (`.png` is added if missing).
     pub path: PathBuf,
     /// Play this clip across the frames. Default none (the current pose).
     pub clip: Option<String>,
@@ -305,7 +306,7 @@ pub struct ExportSpriteSheet {
 
 impl Command for ExportSpriteSheet {
     const NAME: &'static str = "export.sprite_sheet";
-    const DESCRIPTION: &'static str = "Render frames side by side into one PNG: a turntable (the camera circles the scene) and/or a clip played from start to end. Frame i is the i-th step, left to right.";
+    const DESCRIPTION: &'static str = "Render frames side by side into one PNG (or an animated GIF): a turntable (the camera circles the scene) and/or a clip played from start to end. Frame i is the i-th step, left to right.";
     const LONG: bool = true;
     const UNDOABLE: bool = false;
 
@@ -358,7 +359,7 @@ impl Command for ExportSpriteSheet {
             cx.step((i + 1) as f32 / frames as f32)?;
         }
         let mut path = self.path;
-        if path.extension().is_none_or(|e| e != "png") {
+        if path.extension().is_none_or(|e| e != "png" && e != "gif") {
             path.as_mut_os_string().push(".png");
         }
         let (w, h) = cx.storage()?.write_sheet(&pngs, &path)?;
