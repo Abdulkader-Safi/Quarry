@@ -1682,6 +1682,74 @@ impl Quarry {
         } else {
             out.push(note_box(Tone::Neutral, "No skeleton yet. Press + to make one, then add bones from the crosshair. Bones point along their own +Y.").into_any_element());
         }
+        if let Some((_, pose, head, tail)) = self.picked_bone() {
+            out.push(self.header("bone", "Bone", cx));
+            if self.open_section("bone") {
+                let entity = cx.entity();
+                out.push(
+                    segmented(
+                        "rig-mode",
+                        &["Pose", "Rest"],
+                        self.rig_rest as usize,
+                        true,
+                        move |i, _, cx| {
+                            entity.update(cx, |this, cx| {
+                                this.rig_rest = i == 1;
+                                cx.notify();
+                            })
+                        },
+                    )
+                    .into_any_element(),
+                );
+                let axes = [FieldAxis::X, FieldAxis::Y, FieldAxis::Z];
+                if self.rig_rest {
+                    for (label, ids, value, make) in [
+                        (
+                            "Head",
+                            ["hx", "hy", "hz"],
+                            head,
+                            Field::BoneHead as fn(usize) -> Field,
+                        ),
+                        ("Tail", ["tx", "ty", "tz"], tail, Field::BoneTail),
+                    ] {
+                        let fields: Vec<AnyElement> = (0..3)
+                            .map(|i| self.number(ids[i], make(i), value[i], Some(axes[i]), "", cx))
+                            .collect();
+                        out.push(property_row(label, fields).into_any_element());
+                    }
+                    out.push(
+                        note_box(
+                            Tone::Neutral,
+                            "Rest edits move the bone itself. Keys are offsets from rest, so clips keep working.",
+                        )
+                        .into_any_element(),
+                    );
+                } else {
+                    let (x, y, z) = pose.rotation.to_euler(glam::EulerRot::XYZ);
+                    let rot = [x.to_degrees(), y.to_degrees(), z.to_degrees()];
+                    let fields: Vec<AnyElement> = (0..3)
+                        .map(|i| {
+                            let id = ["prx", "pry", "prz"][i];
+                            self.number(id, Field::BonePose(i), rot[i], Some(axes[i]), "°", cx)
+                        })
+                        .collect();
+                    out.push(property_row("Rotate", fields).into_any_element());
+                    out.push(
+                        button(
+                            "pose-reset",
+                            ButtonStyle::Secondary,
+                            "Back to rest pose",
+                            Some("refresh"),
+                        )
+                        .w_full()
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.run("rig.pose_reset", json!({}), cx);
+                        }))
+                        .into_any_element(),
+                    );
+                }
+            }
+        }
         out.push(self.header("weights", "Weight brush", cx));
         if self.open_section("weights") {
             let entity = cx.entity();

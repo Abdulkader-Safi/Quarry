@@ -400,3 +400,47 @@ fn deleting_a_bone_keeps_the_rig_valid_and_undo_unbinds_in_one_pass() {
         "back to an unweighted mesh"
     );
 }
+
+#[test]
+fn editing_the_rest_pose_keeps_keys_and_reset_returns_to_rest() {
+    let mut r = CommandRegistry::new();
+    run(&mut r, "rig.skeleton_new", json!({}));
+    run(
+        &mut r,
+        "rig.bone_add",
+        json!({ "name": "arm", "head": [0, 1, 0], "tail": [1, 1, 0] }),
+    );
+    run(
+        &mut r,
+        "anim.clip_new",
+        json!({ "name": "wave", "length": 1.0 }),
+    );
+    run(
+        &mut r,
+        "anim.key_set",
+        json!({ "bone": "arm", "channel": "rotation", "time": 0.5, "value": [0, 0, 30] }),
+    );
+    let keys = |r: &CommandRegistry| format!("{:?}", r.document().clips.iter().next().unwrap());
+    let before = keys(&r);
+    // Rest edit: move the bone itself.
+    run(
+        &mut r,
+        "rig.bone_edit",
+        json!({ "bone": "arm", "tail": [1, 2, 0] }),
+    );
+    assert_eq!(keys(&r), before, "the clip's keys are untouched");
+    // Pose, then back to rest.
+    run(
+        &mut r,
+        "rig.pose",
+        json!({ "bone": "arm", "rotation": [0, 0, 45] }),
+    );
+    run(&mut r, "rig.pose_reset", json!({}));
+    let s = r.document().skeletons.iter().next().unwrap();
+    assert!(s.pose.iter().all(|p| *p == Default::default()));
+    assert_eq!(
+        s.bones[0].tail,
+        Vec3::new(1.0, 2.0, 0.0),
+        "the rest edit stays"
+    );
+}

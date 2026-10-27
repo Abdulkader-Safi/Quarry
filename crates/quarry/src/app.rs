@@ -138,6 +138,11 @@ pub enum Field {
     UvOffset(usize),
     UvScale(usize),
     Padding,
+    /// The picked bone's pose rotation (Euler degrees) on an axis.
+    BonePose(usize),
+    /// The picked bone's rest head or tail on an axis (metres).
+    BoneHead(usize),
+    BoneTail(usize),
 }
 
 /// A timeline key being dragged; one `anim.key_move` on release.
@@ -229,6 +234,8 @@ pub struct Quarry {
     pub weight_radius: f32,
     pub normalise: bool,
     pub selected_bone: Option<usize>,
+    /// Rig panel: editing the rest pose (bone head and tail) instead of posing.
+    pub rig_rest: bool,
     pub selected_key: Option<(usize, usize)>,
     pub playing: bool,
     last_tick: Instant,
@@ -371,6 +378,7 @@ impl Quarry {
             weight_radius: 24.0,
             normalise: true,
             selected_bone: None,
+            rig_rest: false,
             selected_key: None,
             playing: false,
             last_tick: Instant::now(),
@@ -1364,6 +1372,17 @@ impl Quarry {
         );
     }
 
+    /// The picked bone: name, current pose, rest head and tail.
+    pub fn picked_bone(
+        &self,
+    ) -> Option<(String, quarry_core::model::BonePose, glam::Vec3, glam::Vec3)> {
+        let s = self.reg.document().skeletons.iter().next()?;
+        let i = self.selected_bone?;
+        let b = s.bones.get(i)?;
+        let pose = s.pose.get(i).copied().unwrap_or_default();
+        Some((b.name.clone(), pose, b.head, b.tail))
+    }
+
     pub fn selected_bone_name(&self) -> Option<String> {
         let skeleton = self.reg.document().skeletons.iter().next()?;
         skeleton
@@ -1577,6 +1596,8 @@ impl Quarry {
             Field::ExportScale => 0.01,
             Field::UvOffset(_) => 0.25,
             Field::UvScale(_) => 0.01,
+            Field::BonePose(_) => 0.5,
+            Field::BoneHead(_) | Field::BoneTail(_) => 0.01,
         }
     }
 
@@ -1651,6 +1672,27 @@ impl Quarry {
             Field::ExportScale => self.export_scale = (self.export_scale + v).max(0.01),
             Field::Padding => {
                 self.uv_padding = ((self.uv_padding as f32 + v).round().max(0.0)) as u32
+            }
+            Field::BonePose(i) => {
+                if let Some((bone, pose, _, _)) = self.picked_bone() {
+                    let (x, y, z) = pose.rotation.to_euler(glam::EulerRot::XYZ);
+                    let mut r = [x.to_degrees(), y.to_degrees(), z.to_degrees()];
+                    r[i] += v;
+                    self.run("rig.pose", json!({ "bone": bone, "rotation": r }), cx);
+                }
+            }
+            Field::BoneHead(i) | Field::BoneTail(i) => {
+                if let Some((bone, _, head, tail)) = self.picked_bone() {
+                    let head_end = matches!(field, Field::BoneHead(_));
+                    let mut p = if head_end { head } else { tail };
+                    p[i] += v;
+                    let key = if head_end { "head" } else { "tail" };
+                    self.run(
+                        "rig.bone_edit",
+                        json!({ "bone": bone, key: p.to_array() }),
+                        cx,
+                    );
+                }
             }
         }
         cx.notify();
