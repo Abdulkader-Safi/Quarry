@@ -234,6 +234,8 @@ impl Quarry {
                 ("Undo", "history.undo"),
                 ("Redo", "history.redo"),
                 ("Select all", "select.all"),
+                ("Duplicate", "scene.duplicate"),
+                ("Duplicate mirrored on X", "@dup-mirror"),
                 ("Select none", "select.none"),
                 ("Invert selection", "select.invert"),
             ],
@@ -315,6 +317,9 @@ impl Quarry {
             "@light" => self.set_theme(true, cx),
             "@dark" => self.set_theme(false, cx),
             "@play" => self.playing = !self.playing,
+            "@dup-mirror" => {
+                self.run("scene.duplicate", json!({ "mirror": "x" }), cx);
+            }
             "@shade-auto" => {
                 self.run("mesh.shade", json!({ "mode": "auto" }), cx);
             }

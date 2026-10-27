@@ -26,6 +26,7 @@ pub const ACTIONS: &[(&str, &str, &str, &str)] = &[
     ("select.face", "Face mode", "Mesh", "4"),
     ("mesh.extrude", "Extrude", "Mesh", "e"),
     ("mesh.delete", "Delete", "Mesh", "backspace"),
+    ("scene.duplicate", "Duplicate", "Scene", "shift+d"),
     ("tool.move", "Move", "Mesh", "g"),
     ("tool.rotate", "Rotate", "Mesh", "r"),
     ("tool.scale", "Scale", "Mesh", "t"),

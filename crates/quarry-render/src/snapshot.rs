@@ -173,7 +173,11 @@ fn add_mesh(
     bounds: &mut Option<(Vec3, Vec3)>,
 ) {
     let normal_matrix = world.inverse().transpose();
-    let corner_normals = mesh.corner_normals(world_points);
+    let mirrored = world.determinant() < 0.0;
+    let mut corner_normals = mesh.corner_normals(world_points);
+    if mirrored {
+        corner_normals.iter_mut().flatten().for_each(|n| *n = -*n);
+    }
     for (face_index, face) in mesh.faces.iter().enumerate().filter(|(_, f)| !f.hidden) {
         let lit = match tint {
             Tint::None => false,
@@ -242,9 +246,14 @@ fn add_mesh(
                 batches.last_mut().expect("just pushed")
             }
         };
-        // Fan: 3 corners make one triangle, 4 make two.
+        // Fan: 3 corners make one triangle, 4 make two. A mirrored object
+        // (negative scale) turns its faces inside out, so wind them back.
         for i in 1..corners.len() - 1 {
-            batch.vertices.extend([vertex(0), vertex(i), vertex(i + 1)]);
+            if mirrored {
+                batch.vertices.extend([vertex(0), vertex(i + 1), vertex(i)]);
+            } else {
+                batch.vertices.extend([vertex(0), vertex(i), vertex(i + 1)]);
+            }
         }
         for p in &points {
             *bounds = Some(match *bounds {

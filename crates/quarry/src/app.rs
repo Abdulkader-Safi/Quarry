@@ -1812,6 +1812,9 @@ impl Quarry {
                 self.run("mesh.extrude", json!({ "distance": 1.0 }), cx);
             }
             "mesh.delete" => self.delete_selection(cx),
+            "scene.duplicate" => {
+                self.run("scene.duplicate", json!({}), cx);
+            }
             "tool.move" => tool(self, Tool::Translate),
             "tool.rotate" => tool(self, Tool::Spin),
             "tool.scale" => tool(self, Tool::Grow),

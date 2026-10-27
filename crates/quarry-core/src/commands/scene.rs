@@ -1,4 +1,4 @@
-//! Scene structure (FR-SCENE-01 to 05): parenting, order, objects from faces,
+//! Scene structure (FR-SCENE-01 to 05, 07): parenting, order, objects from faces,
 //! origins, instances, markers, collision and custom properties. The exporter
 //! turns markers, collision and properties into node names and `extras` (M5).
 
@@ -7,7 +7,7 @@ use super::tile::compact;
 use super::{object, objects};
 use crate::command::{Command, CommandError, CommandRegistry, CommandResult, Context, ErrorCode};
 use crate::id::Id;
-use crate::model::{Document, MarkerType, Mesh, Object, ObjectKind, PropValue, SelectMode};
+use crate::model::{Axis, Document, MarkerType, Mesh, Object, ObjectKind, PropValue, SelectMode};
 use glam::{Mat4, Vec3};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -24,6 +24,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
     r.register::<SceneMarkerAdd>();
     r.register::<SceneSetCollision>();
     r.register::<SceneSetProps>();
+    r.register::<SceneDuplicate>();
 }
 
 fn parent_world(doc: &Document, parent: Option<Id<Object>>) -> Mat4 {
@@ -409,5 +410,109 @@ impl Command for SceneSetProps {
         }
         o.properties.extend(set);
         Ok(json!({ "properties": o.properties }))
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SceneDuplicate {
+    /// Object IDs or names. Default the selected objects.
+    pub objects: Option<Vec<String>>,
+    /// Mirror the copies across this world axis, through `center`.
+    pub mirror: Option<Axis>,
+    /// A point on the mirror plane [x, y, z]. Default the 3D crosshair.
+    pub center: Option<[f32; 3]>,
+}
+
+impl Command for SceneDuplicate {
+    const NAME: &'static str = "scene.duplicate";
+    const DESCRIPTION: &'static str = "Copy objects, optionally mirrored across a world axis. Mirrored copies swap .L/.R in their names, have their mesh flipped so faces still point out, and select the copies. Skinned copies are left unbound when mirrored.";
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let doc = cx.doc();
+        let ids: Vec<Id<Object>> = match &self.objects {
+            Some(list) => objects(doc, list)?,
+            None => doc.selection.objects.iter().copied().collect(),
+        };
+        if ids.is_empty() {
+            return Err(CommandError::new(
+                ErrorCode::NothingSelected,
+                "No objects to copy. Select some or name them.",
+            ));
+        }
+        let axis = self.mirror.map(|a| match a {
+            Axis::X => 0,
+            Axis::Y => 1,
+            Axis::Z => 2,
+        });
+        let center = self.center.map_or(doc.view.cursor, Vec3::from);
+        let mut made = Vec::new();
+        let mut unbound = Vec::new();
+        for id in ids {
+            let src = doc.objects.get(id).expect("resolved").clone();
+            let world = doc.world_matrix(&src);
+            let mut copy = src.clone();
+            copy.order = last_order(doc, src.parent);
+            let name = axis
+                .and_then(|_| super::rig::mirror_name(&src.name))
+                .filter(|n| doc.objects.by_name(n).is_none())
+                .unwrap_or_else(|| doc.objects.unique_name(&src.name));
+            copy.name = name;
+            let new_world = match axis {
+                None => world,
+                Some(a) => {
+                    let mut flip = Vec3::ONE;
+                    flip[a] = -1.0;
+                    let reflect = Mat4::from_translation(center)
+                        * Mat4::from_scale(flip)
+                        * Mat4::from_translation(-center);
+                    match copy.mesh.as_mut() {
+                        // Bake a mirror along the local axis closest to the
+                        // world one into the mesh, so the copy keeps a plain
+                        // transform with positive scale.
+                        Some(mesh) => {
+                            let k = (0..3)
+                                .max_by(|i, j| {
+                                    world.col(*i)[a].abs().total_cmp(&world.col(*j)[a].abs())
+                                })
+                                .expect("three axes");
+                            let mesh = Arc::make_mut(mesh);
+                            for p in &mut mesh.positions {
+                                p[k] = -p[k];
+                            }
+                            for f in &mut mesh.faces {
+                                f.corners[1..].reverse();
+                            }
+                            if copy.skin.take().is_some() {
+                                mesh.weights.clear();
+                                unbound.push(copy.name.clone());
+                            }
+                            let mut local = Vec3::ONE;
+                            local[k] = -1.0;
+                            reflect * world * Mat4::from_scale(local)
+                        }
+                        // Instances share their source's mesh: negative scale.
+                        None => reflect * world,
+                    }
+                }
+            };
+            let new = doc.objects.insert(copy);
+            set_world(doc, new, new_world);
+            made.push(new);
+        }
+        let sel = &mut doc.selection;
+        sel.objects = made.iter().copied().collect();
+        let names: Vec<String> = made
+            .iter()
+            .filter_map(|id| doc.objects.get(*id).map(|o| o.name.clone()))
+            .collect();
+        let mut reply = json!({ "objects": made, "names": names });
+        if !unbound.is_empty() {
+            reply["warning"] = json!(format!(
+                "Mirrored skinned copies are not bound: {}. Bind them with rig.bind_auto.",
+                unbound.join(", ")
+            ));
+        }
+        Ok(reply)
     }
 }

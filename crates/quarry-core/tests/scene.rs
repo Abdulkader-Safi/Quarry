@@ -205,3 +205,76 @@ fn origin_to_cursor_keeps_the_geometry_still() {
     let after = r.document().bounds(r.document().objects.iter()).unwrap();
     assert!(before.0.distance(after.0) < 1e-5 && before.1.distance(after.1) < 1e-5);
 }
+
+#[test]
+fn mirroring_a_copy_flips_it_across_the_axis_and_swaps_the_side_name() {
+    let mut r = CommandRegistry::new();
+    run(
+        &mut r,
+        "mesh.add_primitive",
+        json!({ "kind": "wedge", "name": "Arm.L", "position": [1.0, 0.5, 0.0] }),
+    );
+    run(&mut r, "select.by_ids", json!({ "objects": ["Arm.L"] }));
+    run(&mut r, "mesh.transform", json!({ "rotate": [0, 30, 0] }));
+    let reply = run(
+        &mut r,
+        "scene.duplicate",
+        json!({ "mirror": "x", "center": [0, 0, 0] }),
+    );
+    assert_eq!(reply["names"][0], "Arm.R");
+    let doc = r.document();
+    let world_points = |name: &str| {
+        let o = doc.objects.by_name(name).unwrap();
+        let m = doc.world_matrix(o);
+        let mut pts: Vec<[i64; 3]> = o
+            .mesh
+            .as_ref()
+            .unwrap()
+            .positions
+            .iter()
+            .map(|p| {
+                let q = m.transform_point3(*p);
+                [
+                    (q.x * 1e4).round() as i64,
+                    (q.y * 1e4).round() as i64,
+                    (q.z * 1e4).round() as i64,
+                ]
+            })
+            .collect();
+        pts.sort();
+        pts
+    };
+    let mut flipped: Vec<[i64; 3]> = world_points("Arm.L")
+        .into_iter()
+        .map(|[x, y, z]| [-x, y, z])
+        .collect();
+    flipped.sort();
+    assert_eq!(
+        world_points("Arm.R"),
+        flipped,
+        "a mirror image across x = 0"
+    );
+    let copy = doc.objects.by_name("Arm.R").unwrap();
+    assert!(
+        copy.transform.scale.min_element() > 0.0,
+        "plain positive scale"
+    );
+    // Faces still point away from the shape's middle.
+    let m = doc.world_matrix(copy);
+    let mesh = copy.mesh.as_ref().unwrap();
+    let pts: Vec<Vec3> = mesh
+        .positions
+        .iter()
+        .map(|p| m.transform_point3(*p))
+        .collect();
+    let mid = pts.iter().copied().sum::<Vec3>() / pts.len() as f32;
+    for (f, n) in mesh.faces.iter().zip(mesh.corner_normals(&pts)) {
+        let c = f
+            .corners
+            .iter()
+            .map(|c| pts[c.vertex as usize])
+            .sum::<Vec3>()
+            / f.corners.len() as f32;
+        assert!(n[0].dot(c - mid) > 0.0, "face points outward");
+    }
+}
