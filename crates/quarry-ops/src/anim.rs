@@ -3,13 +3,16 @@
 
 use glam::{Quat, Vec3};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Ease {
     Step,
     Linear,
     In,
     Out,
     InOut,
+    /// A cubic-bezier timing curve from (0, 0) to (1, 1) with control points
+    /// (x1, y1) and (x2, y2), as in CSS. y may overshoot for a bounce.
+    Bezier([f32; 4]),
 }
 
 impl Ease {
@@ -22,6 +25,23 @@ impl Ease {
             Ease::In => t * t,
             Ease::Out => 1.0 - (1.0 - t) * (1.0 - t),
             Ease::InOut => t * t * (3.0 - 2.0 * t),
+            Ease::Bezier([x1, y1, x2, y2]) => {
+                // Find s where x(s) = t (x is monotonic for x1, x2 in 0..1), then y(s).
+                let cubic = |a: f32, b: f32, s: f32| {
+                    3.0 * a * s * (1.0 - s).powi(2) + 3.0 * b * s * s * (1.0 - s) + s.powi(3)
+                };
+                let (x1, x2) = (x1.clamp(0.0, 1.0), x2.clamp(0.0, 1.0));
+                let (mut lo, mut hi) = (0.0f32, 1.0f32);
+                for _ in 0..32 {
+                    let mid = (lo + hi) / 2.0;
+                    if cubic(x1, x2, mid) < t {
+                        lo = mid;
+                    } else {
+                        hi = mid;
+                    }
+                }
+                cubic(y1, y2, (lo + hi) / 2.0)
+            }
         }
     }
 }
@@ -129,6 +149,11 @@ mod tests {
         assert_eq!(evaluate(&step, 1.0), Some(Vec3::X));
         assert!(Ease::In.shape(0.5) < 0.5 && Ease::Out.shape(0.5) > 0.5);
         assert_eq!(Ease::InOut.shape(0.5), 0.5);
+        // CSS "linear" as a bezier, and an ease-out shape.
+        let linear = Ease::Bezier([0.25, 0.25, 0.75, 0.75]);
+        assert!((linear.shape(0.3) - 0.3).abs() < 1e-3);
+        let out = Ease::Bezier([0.0, 0.6, 0.4, 1.0]);
+        assert!(out.shape(0.5) > 0.6 && out.shape(1.0) > 0.999 && out.shape(0.0) < 1e-3);
         assert_eq!(evaluate::<Vec3>(&[], 0.0), None);
     }
 

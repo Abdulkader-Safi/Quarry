@@ -237,6 +237,10 @@ pub struct Quarry {
     /// Rig panel: editing the rest pose (bone head and tail) instead of posing.
     pub rig_rest: bool,
     pub selected_key: Option<(usize, usize)>,
+    /// A curve handle being dragged in the timeline's curve row: which one
+    /// (0 or 1) and the handles as they are now.
+    pub curve_drag: Option<(usize, [glam::Vec2; 2])>,
+    pub curve_bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
     pub playing: bool,
     last_tick: Instant,
     pub interp: &'static str,
@@ -379,6 +383,8 @@ impl Quarry {
             selected_bone: None,
             rig_rest: false,
             selected_key: None,
+            curve_drag: None,
+            curve_bounds: Default::default(),
             playing: false,
             last_tick: Instant::now(),
             interp: "linear",
@@ -1371,6 +1377,48 @@ impl Quarry {
         );
     }
 
+    /// The selected timeline key: bone, channel name, time, its handles (if
+    /// it has a curve) and whether a key follows it (a segment to shape).
+    pub fn selected_key_info(
+        &self,
+    ) -> Option<(String, &'static str, f32, Option<[glam::Vec2; 2]>, bool)> {
+        use quarry_core::model::TrackTarget;
+        let doc = self.reg.document();
+        let clip = doc.clips.get(doc.view.anim.clip?)?;
+        let (row, k) = self.selected_key?;
+        let track = clip.tracks.get(row)?;
+        let key = track.keys.get(k)?;
+        let s = doc.skeletons.get(clip.skeleton)?;
+        let bone = match track.target {
+            TrackTarget::Bone(b) => b,
+            TrackTarget::Ik(c) => s.ik_chains.get(c as usize)?.tip_bone,
+        };
+        let name = s.bones.get(bone as usize)?.name.clone();
+        let handles = (key.interp == quarry_core::model::Interp::Bezier)
+            .then_some(key.handles)
+            .flatten();
+        Some((
+            name,
+            crate::panels::channel_arg(track.channel),
+            key.time,
+            handles,
+            k + 1 < track.keys.len(),
+        ))
+    }
+
+    /// Give the selected key's segment this curve (`anim.key_ease`).
+    pub fn set_key_curve(&mut self, handles: [glam::Vec2; 2], cx: &mut Context<Self>) {
+        if let Some((bone, channel, time, _, true)) = self.selected_key_info() {
+            let h = [[handles[0].x, handles[0].y], [handles[1].x, handles[1].y]];
+            self.run(
+                "anim.key_ease",
+                json!({ "bone": bone, "channel": channel, "time": time, "handles": h }),
+                cx,
+            );
+        }
+        cx.notify();
+    }
+
     /// The picked bone: name, current pose, rest head and tail.
     pub fn picked_bone(
         &self,
@@ -1402,7 +1450,11 @@ impl Quarry {
     }
 
     pub fn root_mouse_move(&mut self, e: &MouseMoveEvent, cx: &mut Context<Self>) {
-        if let Some(d) = &mut self.field_drag {
+        if let Some((which, handles)) = &mut self.curve_drag {
+            let b = self.curve_bounds.get();
+            handles[*which] = crate::panels::curve_point(b, e.position);
+            cx.notify();
+        } else if let Some(d) = &mut self.field_drag {
             d.delta = f32::from(e.position.x) - d.start_x;
             cx.notify();
         } else if let Some(d) = &mut self.key_drag {
@@ -1553,6 +1605,9 @@ impl Quarry {
         if self.gizmo_drag.take().is_some() {
             self.sync_camera_from_doc();
             cx.notify();
+        }
+        if let Some((_, handles)) = self.curve_drag.take() {
+            self.set_key_curve(handles, cx);
         }
         if let Some(d) = self.key_drag.take() {
             let fps = self.reg.document().settings.fps.max(1) as f32;

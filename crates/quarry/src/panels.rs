@@ -2707,9 +2707,165 @@ impl Quarry {
                     .bg(p.accent)
                     .child(text(frame.to_string(), Type::MonoS, p.text_on_accent)),
             );
-        let _ = cx;
-        div().flex().flex_col().w_full().child(header).child(tracks)
+        div()
+            .flex()
+            .flex_col()
+            .w_full()
+            .child(header)
+            .child(tracks)
+            .children(self.curve_row(cx))
     }
+
+    /// FR-ANIM-06: the selected key's segment as a curve with two handles to
+    /// drag, and presets. Playback and export follow it.
+    fn curve_row(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        let p = t();
+        let (_, _, _, handles, has_next) = self.selected_key_info()?;
+        if !has_next {
+            return Some(div().px(px(12.0)).py(px(8.0)).child(text(
+                "Pick a key with another after it to shape the motion between them.",
+                Type::BodyS,
+                p.text_muted,
+            )));
+        }
+        let shown = match &self.curve_drag {
+            Some((_, h)) => *h,
+            None => handles.unwrap_or([glam::Vec2::new(0.42, 0.0), glam::Vec2::new(0.58, 1.0)]),
+        };
+        let bounds = self.curve_bounds.clone();
+        let (line, handle_color, accent) = (p.text_secondary, p.text_muted, p.accent);
+        let canvas_el = canvas(
+            |_, _, _| {},
+            move |b, _, window, _| {
+                let at = |v: glam::Vec2| curve_pixel(b, v);
+                let mut curve = PathBuilder::stroke(px(2.0));
+                for i in 0..=32 {
+                    let s = i as f32 / 32.0;
+                    let cubic = |a: f32, c: f32| {
+                        3.0 * a * s * (1.0 - s).powi(2) + 3.0 * c * s * s * (1.0 - s) + s.powi(3)
+                    };
+                    let q = at(glam::Vec2::new(
+                        cubic(shown[0].x, shown[1].x),
+                        cubic(shown[0].y, shown[1].y),
+                    ));
+                    if i == 0 {
+                        curve.move_to(q)
+                    } else {
+                        curve.line_to(q)
+                    }
+                }
+                if let Ok(path) = curve.build() {
+                    window.paint_path(path, line);
+                }
+                for (end, h) in [(glam::Vec2::ZERO, shown[0]), (glam::Vec2::ONE, shown[1])] {
+                    let mut arm = PathBuilder::stroke(px(1.0));
+                    arm.move_to(at(end));
+                    arm.line_to(at(h));
+                    if let Ok(path) = arm.build() {
+                        window.paint_path(path, handle_color);
+                    }
+                    let c = at(h);
+                    let mut dot = PathBuilder::fill();
+                    let pts: Vec<_> = (0..12)
+                        .map(|i| {
+                            let a = i as f32 / 12.0 * std::f32::consts::TAU;
+                            point(c.x + px(5.0 * a.cos()), c.y + px(5.0 * a.sin()))
+                        })
+                        .collect();
+                    dot.add_polygon(&pts, true);
+                    if let Ok(path) = dot.build() {
+                        window.paint_path(path, accent);
+                    }
+                }
+            },
+        )
+        .absolute()
+        .inset_0();
+        let graph = div()
+            .id("curve")
+            .relative()
+            .w(px(220.0))
+            .h(px(110.0))
+            .flex_none()
+            .bg(p.bg_input)
+            .border_1()
+            .border_color(p.border_subtle)
+            .rounded(px(6.0))
+            .child(crate::viewport::measure(bounds.clone()))
+            .child(canvas_el)
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, e: &MouseDownEvent, _, cx| {
+                    // Grab whichever handle is nearer the pointer.
+                    let b = bounds.get();
+                    let v = curve_point(b, e.position);
+                    let which = (v.distance(shown[1]) < v.distance(shown[0])) as usize;
+                    let mut h = shown;
+                    h[which] = v;
+                    this.curve_drag = Some((which, h));
+                    cx.notify();
+                }),
+            );
+        let mut presets = div().flex().flex_wrap().gap(px(6.0));
+        for (i, (label, a, b)) in [
+            ("Linear", [0.0, 0.0], [1.0, 1.0]),
+            ("Ease in", [0.42, 0.0], [1.0, 1.0]),
+            ("Ease out", [0.0, 0.0], [0.58, 1.0]),
+            ("Smooth", [0.42, 0.0], [0.58, 1.0]),
+            ("Snappy", [0.1, 0.9], [0.2, 1.0]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            presets = presets.child(
+                button(("curve-preset", i), ButtonStyle::Secondary, label, None).on_click(
+                    cx.listener(move |this, _, _, cx| {
+                        this.set_key_curve([glam::Vec2::from(a), glam::Vec2::from(b)], cx)
+                    }),
+                ),
+            );
+        }
+        Some(
+            div()
+                .flex()
+                .gap(px(12.0))
+                .px(px(12.0))
+                .py(px(8.0))
+                .border_t_1()
+                .border_color(p.border_subtle)
+                .child(graph)
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.0))
+                        .child(text("Curve to the next key", Type::LabelS, p.text_primary))
+                        .child(text(
+                            "Drag a handle. Playback and export follow the curve.",
+                            Type::BodyS,
+                            p.text_muted,
+                        ))
+                        .child(presets),
+                ),
+        )
+    }
+}
+
+/// The curve canvas shows y from -0.25 to 1.25 so overshoot stays visible.
+fn curve_pixel(b: Bounds<Pixels>, v: glam::Vec2) -> Point<Pixels> {
+    let (w, h) = (f32::from(b.size.width), f32::from(b.size.height));
+    point(
+        b.origin.x + px(8.0 + v.x * (w - 16.0)),
+        b.origin.y + px((1.25 - v.y) / 1.5 * h),
+    )
+}
+
+/// A pointer position on the curve canvas as a handle (x clamped to 0..1).
+pub fn curve_point(b: Bounds<Pixels>, at: Point<Pixels>) -> glam::Vec2 {
+    let (w, h) = (f32::from(b.size.width), f32::from(b.size.height));
+    let x = (f32::from(at.x - b.origin.x) - 8.0) / (w - 16.0).max(1.0);
+    let y = 1.25 - f32::from(at.y - b.origin.y) / h.max(1.0) * 1.5;
+    glam::Vec2::new(x.clamp(0.0, 1.0), y.clamp(-0.25, 1.25))
 }
 
 fn uv_outline(r: [f32; 4], w: u32, h: u32, color: Rgba, filled: bool) -> Div {
@@ -2753,7 +2909,7 @@ fn safe_image_path(path: &str) -> Option<std::path::PathBuf> {
 }
 
 /// `anim.key_move` channel names.
-fn channel_arg(c: Channel) -> &'static str {
+pub fn channel_arg(c: Channel) -> &'static str {
     match c {
         Channel::Translation => "translation",
         Channel::Rotation => "rotation",
@@ -2792,5 +2948,23 @@ mod open_tests {
         let txt = dir.join("t.txt");
         std::fs::write(&txt, b"x").unwrap();
         assert!(super::safe_image_path(txt.to_str().unwrap()).is_none());
+    }
+}
+
+#[cfg(test)]
+mod curve_tests {
+    use super::{curve_pixel, curve_point};
+    use gpui_kit::{Bounds, point, px, size};
+
+    #[::core::prelude::v1::test]
+    fn a_handle_survives_the_trip_to_pixels_and_back() {
+        let b = Bounds::new(point(px(100.0), px(50.0)), size(px(220.0), px(110.0)));
+        for v in [
+            glam::Vec2::new(0.42, 0.0),
+            glam::Vec2::new(0.1, 1.2),
+            glam::Vec2::ONE,
+        ] {
+            assert!(curve_point(b, curve_pixel(b, v)).distance(v) < 1e-4);
+        }
     }
 }

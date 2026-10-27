@@ -339,3 +339,42 @@ fn mirroring_a_pose_and_a_clip_swaps_left_and_right() {
     .unwrap();
     assert!(near(tail(&r, "arm.R"), left * Vec3::new(-1.0, 1.0, 1.0)));
 }
+
+#[test]
+fn a_curve_on_a_key_changes_how_playback_moves() {
+    let mut r = CommandRegistry::new();
+    let mut ok = |n: &str, a: Value| {
+        r.execute(n, a, Source::Human)
+            .unwrap_or_else(|e| panic!("{n}: {}", e.message));
+    };
+    ok("rig.skeleton_new", json!({}));
+    ok(
+        "rig.bone_add",
+        json!({ "name": "b", "head": [0, 0, 0], "tail": [0, 1, 0] }),
+    );
+    ok("anim.clip_new", json!({ "name": "slide", "length": 1.0 }));
+    ok(
+        "anim.key_set",
+        json!({ "bone": "b", "channel": "translation", "time": 0.0, "value": [0, 0, 0], "interp": "linear" }),
+    );
+    ok(
+        "anim.key_set",
+        json!({ "bone": "b", "channel": "translation", "time": 1.0, "value": [1, 0, 0] }),
+    );
+    let x_at = |r: &mut CommandRegistry, t: f32| {
+        r.execute("anim.playhead", json!({ "time": t }), Source::Human)
+            .unwrap();
+        r.document().skeletons.iter().next().unwrap().pose[0]
+            .translation
+            .x
+    };
+    assert!((x_at(&mut r, 0.25) - 0.25).abs() < 1e-3, "linear first");
+    // A fast start: most of the way there by a quarter of the time.
+    r.execute(
+        "anim.key_ease",
+        json!({ "bone": "b", "channel": "translation", "time": 0.0, "handles": [[0.0, 0.9], [0.2, 1.0]] }),
+        Source::Human,
+    )
+    .unwrap();
+    assert!(x_at(&mut r, 0.25) > 0.6, "the curve shapes playback");
+}

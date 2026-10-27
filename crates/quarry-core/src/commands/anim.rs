@@ -30,6 +30,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
     r.register::<AnimCrossfadePreview>();
     r.register::<AnimPoseMirror>();
     r.register::<AnimClipMirror>();
+    r.register::<AnimKeyEase>();
     r.register::<QueryClip>();
 }
 
@@ -955,5 +956,58 @@ impl Command for AnimClipMirror {
         }
         let new = doc.clips.insert(clip);
         Ok(json!({ "clip": new, "name": name, "keys": times.len() }))
+    }
+}
+
+// ---- curve editing (FR-ANIM-06) --------------------------------------------
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AnimKeyEase {
+    pub clip: Option<String>,
+    pub bone: String,
+    pub channel: KeyChannel,
+    /// The key at the start of the segment, in seconds.
+    pub time: f32,
+    /// Curve control points [[x1, y1], [x2, y2]] for the segment to the next
+    /// key: x 0 to 1 across the segment, y 0 at this key's value and 1 at the
+    /// next (outside 0..1 overshoots). Omit to go back to ease-in-out.
+    pub handles: Option<[[f32; 2]; 2]>,
+}
+
+impl Command for AnimKeyEase {
+    const NAME: &'static str = "anim.key_ease";
+    const DESCRIPTION: &'static str = "Shape the motion from one key to the next with a curve (two handles, like a CSS cubic-bezier). Playback and export follow it.";
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let handles = match self.handles {
+            Some(h) => {
+                if h.iter().flatten().any(|v| !v.is_finite())
+                    || !(0.0..=1.0).contains(&h[0][0])
+                    || !(0.0..=1.0).contains(&h[1][0])
+                {
+                    return Err(CommandError::new(
+                        ErrorCode::OutOfBounds,
+                        "Handle x must be 0 to 1 (across the segment); y can be any number.",
+                    ));
+                }
+                Some([glam::Vec2::from(h[0]), glam::Vec2::from(h[1])])
+            }
+            None => None,
+        };
+        let doc = cx.doc();
+        let clip = active_clip(doc, self.clip.as_deref())?;
+        let target = track_target(doc, clip, &self.bone, self.channel)?;
+        let c = doc.clips.get_mut(clip).expect("resolved");
+        let t = track_index(c, target, self.channel.channel())?;
+        let i = key_at(&c.tracks[t].keys, self.time)?;
+        let key = &mut c.tracks[t].keys[i];
+        key.interp = if handles.is_some() {
+            Interp::Bezier
+        } else {
+            Interp::EaseInOut
+        };
+        key.handles = handles;
+        Ok(json!({ "time": key.time, "interp": key.interp }))
     }
 }

@@ -865,7 +865,7 @@ impl Clip {
                     .keys
                     .iter()
                     .filter_map(|k| match k.value {
-                        KeyValue::Vec3(v) => Some((k.time, v, k.interp.ease())),
+                        KeyValue::Vec3(v) => Some((k.time, v, k.ease())),
                         _ => None,
                     })
                     .collect()
@@ -876,7 +876,7 @@ impl Clip {
                         .keys
                         .iter()
                         .filter_map(|k| match k.value {
-                            KeyValue::Quat(q) => Some((k.time, q, k.interp.ease())),
+                            KeyValue::Quat(q) => Some((k.time, q, k.ease())),
                             _ => None,
                         })
                         .collect();
@@ -922,8 +922,7 @@ impl Interp {
             Interp::Linear => Ease::Linear,
             Interp::EaseIn => Ease::In,
             Interp::EaseOut => Ease::Out,
-            // ponytail: bezier plays as ease-in-out until the graph editor
-            // (FR-ANIM-06, optional) gives it handles.
+            // Bezier without handles; `Key::ease` uses the handles.
             Interp::EaseInOut | Interp::Bezier => Ease::InOut,
         }
     }
@@ -960,8 +959,21 @@ pub struct Key {
     pub time: f32,
     pub value: KeyValue,
     pub interp: Interp,
-    /// Bezier only, from the graph editor.
+    /// Bezier only: the segment's curve control points (x 0..1 across the
+    /// segment, y 0..1 from this key's value to the next), set by the curve
+    /// editor.
     pub handles: Option<[Vec2; 2]>,
+}
+
+impl Key {
+    /// How the segment starting at this key is shaped: a Bezier key with
+    /// handles uses them as its curve's control points (FR-ANIM-06).
+    pub fn ease(&self) -> quarry_ops::anim::Ease {
+        match (self.interp, self.handles) {
+            (Interp::Bezier, Some([a, b])) => quarry_ops::anim::Ease::Bezier([a.x, a.y, b.x, b.y]),
+            _ => self.interp.ease(),
+        }
+    }
 }
 
 /// Translation, scale and IK keys are vectors; rotation keys are quaternions.
