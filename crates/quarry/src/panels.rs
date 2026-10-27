@@ -359,21 +359,18 @@ impl Quarry {
                 })),
         );
         let turn = send.clone();
-        let entity = cx.entity();
-        let rotation = segmented(
+        // A select, as in the design.
+        let options = ["Off", "Random 90° steps"];
+        let rotation = self.dropdown(
             "palette-rotate",
-            &["Off", "Random 90° steps"],
-            rotate as usize,
-            false,
-            move |i, _, cx| {
-                let tiles = tiles.clone();
-                let turn = turn.clone();
-                entity.update(cx, |this, cx| {
-                    if !tiles.is_empty() {
-                        turn(this, tiles, i == 1, cx);
-                    }
-                })
+            options[rotate as usize].to_string(),
+            options.iter().map(|o| o.to_string()).collect(),
+            move |this, i, cx| {
+                if !tiles.is_empty() {
+                    turn(this, tiles.clone(), i == 1, cx);
+                }
             },
+            cx,
         );
         div()
             .flex()
