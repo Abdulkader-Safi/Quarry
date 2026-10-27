@@ -3,7 +3,7 @@
 
 use glam::{Mat4, Vec3};
 use quarry_core::id::Id;
-use quarry_core::model::{Document, Filter, Image, Mesh};
+use quarry_core::model::{Document, Filter, Image, Mesh, SelectMode};
 use std::sync::Arc;
 
 #[repr(C)]
@@ -44,6 +44,12 @@ impl Snapshot {
 }
 
 pub fn snapshot(doc: &Document) -> Snapshot {
+    snapshot_with(doc, false)
+}
+
+/// Selected objects (object mode) or selected faces (face mode) tinted cobalt
+/// for the live viewport. Thumbnails and screenshots use [`snapshot`].
+pub fn snapshot_with(doc: &Document, highlight: bool) -> Snapshot {
     let mut batches: Vec<Batch> = Vec::new();
     let mut bounds: Option<(Vec3, Vec3)> = None;
 
@@ -80,7 +86,17 @@ pub fn snapshot(doc: &Document) -> Snapshot {
                 }
             })
             .collect();
-        add_mesh(doc, mesh, &points, world, &mut batches, &mut bounds);
+        let sel = &doc.selection;
+        let tint = if !highlight {
+            Tint::None
+        } else if sel.mode == SelectMode::Object && sel.objects.contains(&object.id) {
+            Tint::All
+        } else if sel.mode != SelectMode::Object && sel.object == Some(object.id) {
+            Tint::Faces(&sel.faces)
+        } else {
+            Tint::None
+        };
+        add_mesh(doc, mesh, &points, world, tint, &mut batches, &mut bounds);
     }
 
     let images = doc
@@ -102,17 +118,32 @@ pub fn snapshot(doc: &Document) -> Snapshot {
     }
 }
 
+enum Tint<'a> {
+    None,
+    All,
+    Faces(&'a std::collections::BTreeSet<u32>),
+}
+
+/// Accent/default (#3873d3) in linear RGB, mixed into highlighted faces.
+const ACCENT: [f32; 3] = [0.039, 0.171, 0.651];
+
 fn add_mesh(
     doc: &Document,
     mesh: &Mesh,
     // World position of each vertex, posed when skinned.
     world_points: &[Vec3],
     world: Mat4,
+    tint: Tint,
     batches: &mut Vec<Batch>,
     bounds: &mut Option<(Vec3, Vec3)>,
 ) {
     let normal_matrix = world.inverse().transpose();
-    for face in mesh.faces.iter().filter(|f| !f.hidden) {
+    for (face_index, face) in mesh.faces.iter().enumerate().filter(|(_, f)| !f.hidden) {
+        let lit = match tint {
+            Tint::None => false,
+            Tint::All => true,
+            Tint::Faces(set) => set.contains(&(face_index as u32)),
+        };
         let corners: Vec<_> = face
             .corners
             .iter()
@@ -151,7 +182,17 @@ fn add_mesh(
             position: points[i].into(),
             normal: normal.into(),
             uv: [corners[i].uv.x / size[0], corners[i].uv.y / size[1]],
-            color: corners[i].color.into(),
+            color: if lit {
+                let c = corners[i].color;
+                [
+                    c.x * 0.5 + ACCENT[0] * 0.5,
+                    c.y * 0.5 + ACCENT[1] * 0.5,
+                    c.z * 0.5 + ACCENT[2] * 0.5,
+                    c.w,
+                ]
+            } else {
+                corners[i].color.into()
+            },
         };
 
         let batch = match batches.iter_mut().position(|b| b.image == face.image) {

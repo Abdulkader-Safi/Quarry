@@ -37,6 +37,24 @@ pub fn screenshot_png(
     )
 }
 
+/// The live viewport: `doc` (posed meshes of any shape) from `camera` as
+/// tightly packed sRGB RGBA8 rows, or None without a GPU.
+pub fn viewport_rgba(
+    doc: &quarry_core::Document,
+    camera: &camera::OrbitCamera,
+    width: u32,
+    height: u32,
+) -> Option<Vec<u8>> {
+    let renderer = shared()?;
+    Some(renderer.render(
+        &snapshot::snapshot_with(doc, true),
+        camera,
+        doc.view.display,
+        width.max(1),
+        height.max(1),
+    ))
+}
+
 /// A 256x256 iso PNG of the whole document for the recent list, or None when
 /// there is nothing to draw or no GPU.
 pub fn thumbnail_png(doc: &quarry_core::Document) -> Option<Vec<u8>> {

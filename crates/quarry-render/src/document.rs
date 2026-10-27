@@ -290,9 +290,10 @@ impl DocumentRenderer {
                     depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.02,
-                            g: 0.022,
-                            b: 0.027,
+                            // #121316 in sRGB, the design's viewport.
+                            r: 0.0062,
+                            g: 0.0065,
+                            b: 0.0080,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -415,7 +416,7 @@ fn grid_lines(step: f32) -> Vec<DocVertex> {
         let (x_axis, z_axis) = if i == 0 {
             ([0.55, 0.12, 0.12, 1.0], [0.12, 0.2, 0.55, 1.0])
         } else {
-            ([0.09, 0.09, 0.1, 1.0], [0.09, 0.09, 0.1, 1.0])
+            ([0.022, 0.024, 0.03, 1.0], [0.022, 0.024, 0.03, 1.0])
         };
         line(
             Vec3::new(-extent, 0.0, t),
