@@ -6,9 +6,9 @@ It is a personal tool: local only, no accounts, no network.
 
 ## Status
 
-Everything except the editor window works today, headless and through MCP. That covers projects, autosave and crash recovery, tiles and live-linked art, mesh editing, UVs, painting, rigging with IK, animation, and glTF export and import. An agent can build, texture, rig, animate and export a model through `quarry-mcp` (`cargo run -p xtask -- agent-session`).
+The editor window follows the Figma design: start screen, the editor with its Tileset, UVs, Paint, Scene and Rig tabs, the timeline, history and agent panels, command search, Export, Settings, Connect Claude, the basics overlay and the live-refresh toast, in dark and light themes. The viewport draws whatever is in the document: tiles, primitives you extrude and edit, painted textures, skinned and posed meshes, and any low-poly glTF model you import.
 
-The GPUI editor itself (start screen, panels, viewport input, timeline) is next and follows the Figma design. What runs as a window today is still the M0 viewport spike.
+Everything also works headless and through MCP: projects, autosave and crash recovery, tiles and live-linked art, mesh editing, UVs, painting, rigging with IK, animation, and glTF export and import. When the window is open, `quarry-mcp` drives it and you watch the agent work (`cargo run -p xtask -- agent-session` runs a scripted session).
 
 `PROGRESS.md` has the measurements and decisions. `docs/spec/06-build-spec.md` is the full plan, and `research/Quarry-Todo/` holds the task board.
 
@@ -27,24 +27,27 @@ The GPUI editor itself (start screen, panels, viewport input, timeline) is next 
 
 ## Run it
 
-The viewport spike opens a 1600x1000 window, prints fps once a second and shows the latest pen pressure in the top-left corner. Use a release build; debug builds are much slower.
-
 ```bash
-cargo run -p quarry --release
+cargo run -p quarry --release                       # the editor, on the start screen
+cargo run -p quarry --release -- scene.quarry       # open a project straight away
 ```
 
-Flags for the spike:
+Try the sample robot from the start screen (13 bones, idle and walk clips), or the sample tileset. In the view: Alt-drag or middle-drag orbits, Shift pans, scroll zooms, F frames everything, 1 to 4 switch object, vertex, edge and face selection, E extrudes, ⌘K searches every command, ⌘Z undoes.
+
+`QUARRY_UI="side=rig;bottom=timeline;overlay=export"` opens panels at launch, for screenshots and demos.
+
+The M0 viewport spike and the renderer checks are still there:
 
 ```bash
-cargo run -p quarry --release -- --secs 10          # quit after 10 seconds
-cargo run -p quarry --release -- --latency-check    # post 30 clicks, print click-to-frame latency (macOS)
+cargo run -p quarry --release -- --spike --secs 10  # the spike window, quit after 10 seconds
+cargo run -p quarry --release -- --spike --latency-check    # post 30 clicks, print click-to-frame latency (macOS)
 cargo run -p quarry --release -- --bench            # renderer timing with no window, 300 frames
 cargo run -p quarry --release -- --bench --frames 1000
 cargo run -p quarry --release -- --check            # render one frame offscreen and read it back
 cargo run -p quarry --release -- --present-check    # compare the NV12 present path with the scene (macOS)
 ```
 
-Click in the window to print `click_to_frame_ms` for that click. Draw with a tablet pen, or press hard on a Force Touch trackpad, to see the pressure value change.
+In the spike, click to print `click_to_frame_ms` for that click. Draw with a tablet pen, or press hard on a Force Touch trackpad, to see the pressure value change.
 
 Headless mode runs the same document and commands with no window:
 

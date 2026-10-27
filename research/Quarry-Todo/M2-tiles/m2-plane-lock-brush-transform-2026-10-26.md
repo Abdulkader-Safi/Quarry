@@ -1,11 +1,11 @@
 ---
 id: "m2-plane-lock-brush-transform-2026-10-26"
-status: "todo"
+status: "review"
 priority: "high"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T22:30:00.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m2", "tiles"]
 order: 24
 ---
@@ -29,3 +29,6 @@ FR-TILE-04 and FR-TILE-05. Tiles go on walls and floors, not just one plane.
 - `tile.plane(axis, tilt?)` through the crosshair; `tile.brush` rotate 0/90/180/270, mirror, flip, applied to UVs and to a multi-tile stamp's layout.
 - Tested: X-locked tiles face +X; a quarter turn shifts UV corners by one; 45-degree tilted cells share edges with no gap.
 - Left: the crosshair plane visual.
+
+**UI (2026-10-26)**
+UI: plane axis segmented control and height buttons; brush rotate, flip and mirror buttons; plane bar over the view.

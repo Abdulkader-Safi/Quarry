@@ -1,11 +1,11 @@
 ---
 id: "m7-timeline-keys-2026-10-26"
-status: "todo"
+status: "review"
 priority: "medium"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-27T07:30:00.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m7", "anim", "ui"]
 order: 60
 ---
@@ -31,3 +31,6 @@ FR-ANIM-02 and FR-ANIM-03. The largest UI element after the viewport.
 - Interpolation per key: step, linear, ease in, ease out, ease in/out (`quarry-ops::anim`); bezier plays as ease in/out until the optional graph editor.
 - Tested: auto-key at 0.5 s; paste of 0 to 1 s at 2 s; a step key holds until the next key.
 - Left: the timeline element (tracks, diamonds, zoom, box select, snapping).
+
+**UI (2026-10-26)**
+Timeline: ruler click sets the playhead, tracks per bone channel, keys as diamonds (agent keys violet), interpolation select, auto-key. Dragging keys is not in yet.

@@ -1,11 +1,11 @@
 ---
 id: "m3-selection-2026-10-26"
-status: "todo"
+status: "review"
 priority: "high"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-27T00:10:00.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m3", "mesh", "ui"]
 order: 31
 ---
@@ -31,3 +31,6 @@ FR-MESH-02. Selection is the input every mesh command relies on.
 - Commands: `select.mode`, `select.by_ids` (add/remove), `select.box` (rect in viewport fractions through the saved camera), `select.all`, `select.none`, `select.invert`, `select.by_image`, `select.by_normal`, `query.selection` (ids and world bounds).
 - Tested: front view box over the left half selects 4 vertices, adding one makes 5; invert twice is the original set; by_normal up picks the top face; bad indices change nothing.
 - Left (UI): click and lasso input, picking from the renderer's id buffer with backface handling, near-vertex cycling, status bar counts. Lasso can feed `select.by_ids`.
+
+**UI (2026-10-26)**
+Object/Vertex/Edge/Face segmented control and 1-4 keys; click picks by ray against the real triangles; selection tinted cobalt in the view. Box drag is not wired in the view yet (select.box works through the palette and MCP).

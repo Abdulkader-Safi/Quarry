@@ -1,11 +1,11 @@
 ---
 id: "m3-scene-tree-2026-10-26"
-status: "todo"
+status: "review"
 priority: "high"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-27T01:20:00.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m3", "scene", "ui"]
 order: 37
 ---
@@ -31,3 +31,6 @@ FR-SCENE-01.
 - Locked and hidden objects are skipped by `select.box` and `select.all`.
 - Tested: B parented under A stays put, then follows A up 2 m; reorder puts B first.
 - Left: the tree panel with drag to reorder and reparent, inline rename, the filter field, and viewport picking that ignores locked objects.
+
+**UI (2026-10-26)**
+Scene tree by parent with triangle counts, instances, markers, skeletons; filter by name; click selects, shift adds, double-click folds. Rename and drag to reparent are not in the UI yet.

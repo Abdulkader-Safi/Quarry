@@ -1,11 +1,11 @@
 ---
 id: "m8-connect-claude-2026-10-26"
-status: "todo"
+status: "review"
 priority: "medium"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T09:57:15.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m8", "mcp", "ui"]
 order: 71
 ---
@@ -23,3 +23,6 @@ FR-MCP-08.
 - [ ] Paste the shown line into Claude Code: `/mcp` lists Quarry as connected.
 - [ ] The dialog works on macOS, Windows and Linux paths.
 - [ ] Copy buttons write the exact text with no smart quotes.
+
+**UI (2026-10-26)**
+Connect Claude dialog with the quarry-mcp command for Claude Code and the desktop config, copy button and live connection state. Checked end to end: a scripted MCP client built a low-poly tree in the open window.

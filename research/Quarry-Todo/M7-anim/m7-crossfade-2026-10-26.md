@@ -1,11 +1,11 @@
 ---
 id: "m7-crossfade-2026-10-26"
-status: "todo"
+status: "review"
 priority: "medium"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-27T07:30:00.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m7", "anim"]
 order: 64
 ---
@@ -29,3 +29,6 @@ FR-ANIM-08.
 - `anim.crossfade_preview(from, to, fade, time)` returns the blended pose (linear weight time/fade like Cairn's Fade, slerp for rotations); fade 0 is a hard cut; nothing in the document or history changes.
 - Tested: halfway through a 0.25 s fade the rotation is half way; the document and history are identical afterwards.
 - Left: the on-screen readout and default fade setting; matching against Cairn by eye.
+
+**UI (2026-10-26)**
+UI: Crossfade preview section (from, to, fade) runs anim.crossfade_preview.

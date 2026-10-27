@@ -1,11 +1,11 @@
 ---
 id: "m2-tileset-import-2026-10-26"
-status: "todo"
+status: "review"
 priority: "high"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T22:30:00.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m2", "tiles", "images"]
 order: 22
 ---
@@ -29,3 +29,6 @@ FR-TILE-01. Everything tile-based starts here.
 
 - `tile.import_tileset(path, tile_px?, padding?, name?)`: PNG or flattened PSD becomes a linked tileset; sets the brush to tile 0. Undo removes it. Tested: 256 px at 16 px is 16 x 16; pixels survive save and reopen.
 - Left: the tileset panel (grid, scroll, zoom, index readout) and the delete-in-use confirm.
+
+**UI (2026-10-26)**
+UI: Tileset tab shows the image at a whole-number zoom; click a tile for the brush, shift-click to grow it; + imports a tileset.

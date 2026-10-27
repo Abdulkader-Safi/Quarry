@@ -1,11 +1,11 @@
 ---
 id: "m1-command-search-shortcuts-2026-10-26"
-status: "todo"
+status: "review"
 priority: "critical"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T09:57:15.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m1", "ui"]
 order: 19
 ---
@@ -24,3 +24,6 @@ FR-UI-02 and FR-UI-03, driven by the registry rather than a hand-kept list.
 - [ ] Typing "extr" shows Extrude with its shortcut and runs on Enter.
 - [ ] Binding Extrude to a taken key shows a conflict naming that action.
 - [ ] A new command appears in search, the menu and the shortcut editor with no extra wiring.
+
+**UI (2026-10-26)**
+⌘K palette lists every registry command with fuzzy match, arrow keys and Enter. Shortcuts page in Settings lists the keys; rebinding is not wired yet.

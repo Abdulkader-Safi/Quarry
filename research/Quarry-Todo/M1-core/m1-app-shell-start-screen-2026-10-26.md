@@ -1,11 +1,11 @@
 ---
 id: "m1-app-shell-start-screen-2026-10-26"
-status: "todo"
+status: "review"
 priority: "critical"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T09:57:15.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m1", "ui"]
 order: 16
 ---
@@ -22,3 +22,6 @@ FR-PROJ-06, FR-PROJ-04, first-run flow.
 - [ ] Open three projects, relaunch: all three listed newest first.
 - [ ] A missing file is labelled, not a crash.
 - [ ] New project lands in the editor with pixel-art defaults.
+
+**UI (2026-10-26)**
+Start screen built from the Figma design: rail with New, Open, Import, samples and help; recovery banner; recent cards with thumbnails and filter. New project opens the basics overlay the first time. Missing files are left out of the list rather than labelled; window state restore is not wired yet.

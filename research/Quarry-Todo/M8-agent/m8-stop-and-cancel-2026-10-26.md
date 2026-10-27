@@ -1,11 +1,11 @@
 ---
 id: "m8-stop-and-cancel-2026-10-26"
-status: "todo"
+status: "review"
 priority: "medium"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-27T09:00:00.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m8", "mcp", "ui"]
 order: 70
 ---
@@ -28,3 +28,6 @@ FR-MCP-07.
 
 - `control.cancel` from any socket client stops the running long command and the document is unchanged (M1 test); exports write through a temp file and rename, so a cancelled or failed export leaves no partial file; the server runs requests one at a time, so a second long command waits its turn.
 - Left: the agent status pill (idle, working, tool name) and the Stop button wired to the cancel flag in the app.
+
+**UI (2026-10-26)**
+Agent banner over the view with Stop, violet viewport edge, Agent working pill, agent log with timings and the agent's last screenshot.

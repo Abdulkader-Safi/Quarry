@@ -1,11 +1,11 @@
 ---
 id: "m1-viewport-camera-crosshair-2026-10-26"
-status: "todo"
+status: "review"
 priority: "critical"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T22:30:00.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m1", "render", "ui"]
 order: 18
 ---
@@ -33,3 +33,6 @@ FR-VIEW-01 to FR-VIEW-05. Bring the M0 spike into the real app.
 - Commands: `view.camera` (preset, position/target, ortho), `view.frame` (objects or all), `view.cursor` (position, snap to grid, an object's nearest vertex or its origin), `view.display` (all seven FR-VIEW-05 toggles). `mesh.add_primitive` lands on the crosshair.
 - `quarry-render`: `snapshot()` (world-space batches per image) and `DocumentRenderer` (textures with each image's filter, grid with X/Z axes, backface culling and textured toggles, RGBA/PNG readback). `thumbnail_png` writes the 256 px iso `thumbnail.png` into saved projects.
 - Left for the app (Figma design): the viewport element, mouse/trackpad/keyboard camera input, the crosshair overlay, and the wireframe, vertex colour, weights and bones toggles in the renderer.
+
+**UI (2026-10-26)**
+Viewport renders the document live (any mesh, textured, skinned). Alt or middle drag orbits, Shift pans, scroll zooms, presets Persp/Iso/Front/Top/Side, F frames. Crosshair tool places it on a hit or the ground; WASD/Q/Shift-E move it. The crosshair itself is not drawn in the view yet.

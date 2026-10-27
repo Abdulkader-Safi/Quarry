@@ -1,11 +1,11 @@
 ---
 id: "m2-tile-placement-2026-10-26"
-status: "todo"
+status: "review"
 priority: "high"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-26T22:30:00.000Z"
+modified: "2026-10-26T18:40:00.000Z"
 labels: ["m2", "tiles"]
 order: 23
 ---
@@ -31,3 +31,6 @@ FR-TILE-02, FR-TILE-03, FR-TILE-09. The core loop of the tool.
 - Tiles are quads in a "Tiles" mesh object (or a named one), sharing vertices; placing on a filled cell replaces it; erasing drops orphan vertices.
 - Tested: 5-cell drag is 5 quads, 12 vertices, one history entry; 3x3 fill then erasing a row leaves 6; eyedrop of a 90-degree tile gives rotate 1.
 - Left: mouse input (click, drag, right-click erase, rectangle drag) and the brush preview.
+
+**UI (2026-10-26)**
+UI: click places the brush on the plane cell under the cursor, drag paints, right-click erases, rectangle fill, pick tile from the view.
