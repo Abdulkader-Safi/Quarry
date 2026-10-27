@@ -259,6 +259,8 @@ impl Quarry {
                 ("Bevel edge", "mesh.bevel"),
                 ("Knife between two edges", "mesh.knife"),
                 ("Select edge loop", "select.loop"),
+                ("Shade smooth", "@shade-auto"),
+                ("Shade flat", "@shade-flat"),
                 ("Split", "mesh.split"),
                 ("Make face", "mesh.make_face"),
                 ("Flip normals", "mesh.flip_normals"),
@@ -313,6 +315,12 @@ impl Quarry {
             "@light" => self.set_theme(true, cx),
             "@dark" => self.set_theme(false, cx),
             "@play" => self.playing = !self.playing,
+            "@shade-auto" => {
+                self.run("mesh.shade", json!({ "mode": "auto" }), cx);
+            }
+            "@shade-flat" => {
+                self.run("mesh.shade", json!({ "mode": "flat" }), cx);
+            }
             "@basics" => self.overlay = Overlay::Basics,
             "@connect" => self.overlay = Overlay::Connect,
             "@keys" => {

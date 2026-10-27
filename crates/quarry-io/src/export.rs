@@ -892,40 +892,12 @@ fn safe_name(name: &str) -> String {
         .collect()
 }
 
-/// Normal for each (face, vertex): the face's own for flat faces, the average
-/// of its smoothing group's faces at that vertex otherwise (FR-MESH-09).
+/// Normal for each (face, vertex), from `Mesh::corner_normals` (FR-MESH-09).
 fn vertex_normals(mesh: &Mesh) -> HashMap<(usize, u32), Vec3> {
-    let face_normal = |f: &quarry_core::model::Face| {
-        let p: Vec<Vec3> = f
-            .corners
-            .iter()
-            .map(|c| mesh.positions[c.vertex as usize])
-            .collect();
-        let mut n = Vec3::ZERO;
-        for i in 0..p.len() {
-            n += p[i].cross(p[(i + 1) % p.len()]);
-        }
-        n
-    };
-    let mut smooth: HashMap<(u8, u32), Vec3> = HashMap::new();
-    let mut flat: Vec<Vec3> = Vec::with_capacity(mesh.faces.len());
-    for f in &mesh.faces {
-        let n = face_normal(f);
-        flat.push(n.normalize_or(Vec3::Y));
-        if f.smooth_group != 0 {
-            for c in &f.corners {
-                *smooth.entry((f.smooth_group, c.vertex)).or_default() += n;
-            }
-        }
-    }
+    let normals = mesh.corner_normals(&mesh.positions);
     let mut out = HashMap::new();
-    for (i, f) in mesh.faces.iter().enumerate() {
-        for c in &f.corners {
-            let n = if f.smooth_group == 0 {
-                flat[i]
-            } else {
-                smooth[&(f.smooth_group, c.vertex)].normalize_or(flat[i])
-            };
+    for (i, (f, n)) in mesh.faces.iter().zip(normals).enumerate() {
+        for (c, n) in f.corners.iter().zip(n) {
             out.insert((i, c.vertex), n);
         }
     }

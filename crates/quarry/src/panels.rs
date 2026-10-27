@@ -970,7 +970,16 @@ impl Quarry {
                             },
                         )),
                     )
-                    .child(checkbox("smooth", smooth, "Smooth shading"))
+                    .child(
+                        checkbox("smooth", smooth, "Smooth shading").on_click(cx.listener({
+                            let name = name.clone();
+                            move |this, _, _, cx| {
+                                // On: smooth gentle edges, keep sharp ones hard.
+                                let mode = if smooth { "flat" } else { "auto" };
+                                this.run("mesh.shade", json!({ "mode": mode, "object": name }), cx);
+                            }
+                        })),
+                    )
                     .child(
                         checkbox("locked", object.locked, "Locked").on_click(cx.listener(
                             move |this, _, _, cx| {

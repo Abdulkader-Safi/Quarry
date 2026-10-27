@@ -405,3 +405,38 @@ fn a_knife_cut_across_a_quad_splits_it_and_its_neighbours() {
     assert_eq!(m.faces.len(), 6 + 1 + 2);
     assert_eq!(m.positions.len(), 10);
 }
+
+#[test]
+fn auto_shading_smooths_cylinder_sides_and_keeps_caps_hard() {
+    let mut r = editing("cylinder");
+    run(&mut r, "mesh.shade", json!({ "mode": "auto", "angle": 50 }));
+    let m = mesh(r.document(), "M");
+    let normals = m.corner_normals(&m.positions);
+    // Sides meet at 45 degrees (8 segments) and blend; caps meet them at 90
+    // and keep their own group, so cap corners point straight up or down.
+    let mut side_group = None;
+    for (f, n) in m.faces.iter().zip(&normals) {
+        let up = n[0].y.abs();
+        if up > 0.999 {
+            continue; // a cap corner: hard edge kept
+        }
+        assert!(up < 1e-3, "side normals stay horizontal, got y {up}");
+        assert_ne!(f.smooth_group, 0);
+        assert_eq!(*side_group.get_or_insert(f.smooth_group), f.smooth_group);
+    }
+    let caps: Vec<_> = m
+        .faces
+        .iter()
+        .zip(&normals)
+        .filter(|(_, n)| n[0].y.abs() > 0.999)
+        .collect();
+    assert!(!caps.is_empty());
+    assert!(caps.iter().all(|(f, _)| Some(f.smooth_group) != side_group));
+    run(&mut r, "mesh.shade", json!({ "mode": "flat" }));
+    assert!(
+        mesh(r.document(), "M")
+            .faces
+            .iter()
+            .all(|f| f.smooth_group == 0)
+    );
+}

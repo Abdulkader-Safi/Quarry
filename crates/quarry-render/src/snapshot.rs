@@ -173,6 +173,7 @@ fn add_mesh(
     bounds: &mut Option<(Vec3, Vec3)>,
 ) {
     let normal_matrix = world.inverse().transpose();
+    let corner_normals = mesh.corner_normals(world_points);
     for (face_index, face) in mesh.faces.iter().enumerate().filter(|(_, f)| !f.hidden) {
         let lit = match tint {
             Tint::None => false,
@@ -191,21 +192,22 @@ fn add_mesh(
             .iter()
             .map(|c| world_points[c.vertex as usize])
             .collect();
-        // Newell's method: a stable normal for triangles and slightly bent quads.
-        let mut normal = Vec3::ZERO;
-        for i in 0..points.len() {
-            let (a, b) = (points[i], points[(i + 1) % points.len()]);
-            normal += Vec3::new(
-                (a.y - b.y) * (a.z + b.z),
-                (a.z - b.z) * (a.x + b.x),
-                (a.x - b.x) * (a.y + b.y),
-            );
-        }
-        let normal = normal.normalize_or(
-            normal_matrix
-                .transform_vector3(Vec3::Y)
-                .normalize_or(Vec3::Y),
-        );
+        let fallback = normal_matrix
+            .transform_vector3(Vec3::Y)
+            .normalize_or(Vec3::Y);
+        let normals: Vec<Vec3> = face
+            .corners
+            .iter()
+            .zip(&corner_normals[face_index])
+            .filter(|(c, _)| (c.vertex as usize) < mesh.positions.len())
+            .map(|(_, n)| {
+                if n.length_squared() > 0.0 {
+                    *n
+                } else {
+                    fallback
+                }
+            })
+            .collect();
 
         let size = face
             .image
@@ -215,7 +217,7 @@ fn add_mesh(
             });
         let vertex = |i: usize| DocVertex {
             position: points[i].into(),
-            normal: normal.into(),
+            normal: normals[i].into(),
             uv: [corners[i].uv.x / size[0], corners[i].uv.y / size[1]],
             color: if lit {
                 let c = corners[i].color;

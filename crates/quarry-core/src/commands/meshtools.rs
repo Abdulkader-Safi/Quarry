@@ -17,6 +17,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
     r.register::<SelectLoop>();
     r.register::<MeshBevel>();
     r.register::<MeshKnife>();
+    r.register::<MeshShade>();
 }
 
 /// Faces must have 3 or 4 corners: split a 5- or 6-corner polygon into a
@@ -546,4 +547,135 @@ fn split_edge(mesh: &mut Mesh, u: u32, v: u32, t: f32) -> Result<u32, CommandErr
     new.ok_or_else(|| {
         CommandError::not_found("That edge is not in the mesh. Call query.mesh to list edges.")
     })
+}
+
+// ---- shading ---------------------------------------------------------------
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Shading {
+    Flat,
+    Smooth,
+    /// Smooth across edges sharper than `angle` stays hard.
+    Auto,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MeshShade {
+    pub mode: Shading,
+    /// Auto only: edges where faces meet at more than this many degrees stay
+    /// hard. Default 40.
+    pub angle: Option<f32>,
+    /// Object ID or name: shade all its faces. Default the selected faces of
+    /// the edited mesh, or all of them when none are selected.
+    pub object: Option<String>,
+}
+
+impl Command for MeshShade {
+    const NAME: &'static str = "mesh.shade";
+    const DESCRIPTION: &'static str = "Flat or smooth shading per face (FR-MESH-09). Auto smooths across gentle edges and keeps sharp ones hard, e.g. a cylinder's sides smooth and its caps flat. Exported as glTF normals.";
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let angle = self.angle.unwrap_or(40.0);
+        if !(0.0..=180.0).contains(&angle) {
+            return Err(CommandError::invalid("angle must be 0 to 180 degrees."));
+        }
+        let doc = cx.doc();
+        // In object mode, the selected object stands in for the edited mesh.
+        let picked = (doc.selection.object.is_none())
+            .then(|| doc.selection.objects.iter().next().map(|id| id.to_string()))
+            .flatten();
+        let (mesh, chosen): (&mut Mesh, Option<BTreeSet<u32>>) =
+            match self.object.as_ref().or(picked.as_ref()) {
+                Some(reference) => {
+                    let id = super::object(doc, reference)?;
+                    let o = doc.objects.get_mut(id).expect("found");
+                    let Some(mesh) = o.mesh.as_mut() else {
+                        return Err(CommandError::invalid("That object has no mesh to shade."));
+                    };
+                    (std::sync::Arc::make_mut(mesh), None)
+                }
+                None => {
+                    let faces = (doc.selection.mode == SelectMode::Face
+                        && !doc.selection.faces.is_empty())
+                    .then(|| doc.selection.faces.clone());
+                    (editing(doc)?.2, faces)
+                }
+            };
+        let targets: Vec<usize> = match &chosen {
+            Some(set) => set.iter().map(|f| *f as usize).collect(),
+            None => (0..mesh.faces.len()).collect(),
+        };
+        let groups = match self.mode {
+            Shading::Flat => targets.iter().map(|f| (*f, 0)).collect(),
+            Shading::Smooth => targets.iter().map(|f| (*f, 1)).collect(),
+            Shading::Auto => auto_groups(mesh, &targets, angle),
+        };
+        let mut smooth = 0;
+        for (f, g) in groups {
+            mesh.faces[f].smooth_group = g;
+            smooth += (g != 0) as usize;
+        }
+        Ok(json!({ "faces": targets.len(), "smooth": smooth }))
+    }
+}
+
+/// Flood-fill the target faces across edges gentler than `angle`: each
+/// patch of two or more faces gets its own group, single faces stay flat.
+fn auto_groups(mesh: &Mesh, targets: &[usize], angle: f32) -> Vec<(usize, u8)> {
+    // Each face's own normal, whatever its current group.
+    let flat = |f: usize| {
+        let p: Vec<Vec3> = mesh.faces[f]
+            .corners
+            .iter()
+            .map(|c| mesh.positions[c.vertex as usize])
+            .collect();
+        let mut n = Vec3::ZERO;
+        for i in 0..p.len() {
+            n += p[i].cross(p[(i + 1) % p.len()]);
+        }
+        n.normalize_or(Vec3::Y)
+    };
+    let own: BTreeMap<usize, Vec3> = targets.iter().map(|f| (*f, flat(*f))).collect();
+    let mut by_edge: BTreeMap<(u32, u32), Vec<usize>> = BTreeMap::new();
+    for &f in targets {
+        let c = &mesh.faces[f].corners;
+        for i in 0..c.len() {
+            let (a, b) = (c[i].vertex, c[(i + 1) % c.len()].vertex);
+            by_edge.entry((a.min(b), a.max(b))).or_default().push(f);
+        }
+    }
+    let limit = angle.to_radians().cos();
+    let mut group: BTreeMap<usize, u8> = BTreeMap::new();
+    let mut next = 1u8;
+    for &start in targets {
+        if group.contains_key(&start) {
+            continue;
+        }
+        let mut patch = vec![start];
+        let mut todo = vec![start];
+        group.insert(start, next);
+        while let Some(f) = todo.pop() {
+            let c = &mesh.faces[f].corners;
+            for i in 0..c.len() {
+                let (a, b) = (c[i].vertex, c[(i + 1) % c.len()].vertex);
+                for &g in &by_edge[&(a.min(b), a.max(b))] {
+                    if !group.contains_key(&g) && own[&f].dot(own[&g]) >= limit {
+                        group.insert(g, next);
+                        patch.push(g);
+                        todo.push(g);
+                    }
+                }
+            }
+        }
+        if patch.len() == 1 {
+            group.insert(start, 0);
+        } else {
+            // ponytail: 255 patches per call, then numbers repeat; patches
+            // that share a vertex and a number would blend at that vertex.
+            next = if next == 255 { 1 } else { next + 1 };
+        }
+    }
+    group.into_iter().collect()
 }

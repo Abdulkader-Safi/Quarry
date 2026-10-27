@@ -533,6 +533,57 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    /// A normal per face corner from `points` (one per vertex, local or posed):
+    /// the face's own on flat faces (smooth group 0), otherwise the
+    /// area-weighted average of its smoothing group's faces at that vertex
+    /// (FR-MESH-09). Shared by the viewport and the glTF export.
+    pub fn corner_normals(&self, points: &[Vec3]) -> Vec<Vec<Vec3>> {
+        // Newell's method: area-weighted, stable for slightly bent quads.
+        let newell = |f: &Face| {
+            let mut n = Vec3::ZERO;
+            let k = f.corners.len();
+            for i in 0..k {
+                let a = points
+                    .get(f.corners[i].vertex as usize)
+                    .copied()
+                    .unwrap_or_default();
+                let b = points
+                    .get(f.corners[(i + 1) % k].vertex as usize)
+                    .copied()
+                    .unwrap_or_default();
+                n += Vec3::new(
+                    (a.y - b.y) * (a.z + b.z),
+                    (a.z - b.z) * (a.x + b.x),
+                    (a.x - b.x) * (a.y + b.y),
+                );
+            }
+            n
+        };
+        let raw: Vec<Vec3> = self.faces.iter().map(newell).collect();
+        let mut smooth: std::collections::HashMap<(u8, u32), Vec3> = Default::default();
+        for (f, n) in self.faces.iter().zip(&raw) {
+            if f.smooth_group != 0 {
+                for c in &f.corners {
+                    *smooth.entry((f.smooth_group, c.vertex)).or_default() += *n;
+                }
+            }
+        }
+        self.faces
+            .iter()
+            .zip(&raw)
+            .map(|(f, n)| {
+                let flat = n.normalize_or(Vec3::Y);
+                f.corners
+                    .iter()
+                    .map(|c| match f.smooth_group {
+                        0 => flat,
+                        g => smooth[&(g, c.vertex)].normalize_or(flat),
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
     pub fn bytes(&self) -> usize {
         self.positions.len() * 12
             + self.weights.len() * 24
