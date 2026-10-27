@@ -269,3 +269,73 @@ fn keyed_ik_targets_place_the_foot() {
     }
     assert!(matches!(clip.tracks[0].keys[1].value, KeyValue::Vec3(_)));
 }
+
+fn tail(r: &CommandRegistry, bone: &str) -> Vec3 {
+    let s = r.document().skeletons.iter().next().unwrap();
+    let i = s.index(bone).unwrap() as usize;
+    let len = s.bones[i].head.distance(s.bones[i].tail);
+    s.pose_world()[i].transform_point3(Vec3::Y * len)
+}
+
+#[test]
+fn mirroring_a_pose_and_a_clip_swaps_left_and_right() {
+    let mut r = CommandRegistry::new();
+    let mut ok = |n: &str, a: Value| {
+        r.execute(n, a, Source::Human)
+            .unwrap_or_else(|e| panic!("{n}: {}", e.message));
+    };
+    ok("rig.skeleton_new", json!({}));
+    ok(
+        "rig.bone_add",
+        json!({ "name": "chest", "head": [0, 1, 0], "tail": [0, 1.5, 0] }),
+    );
+    ok(
+        "rig.bone_add",
+        json!({ "name": "arm.L", "parent": "chest", "head": [0.2, 1.4, 0], "tail": [0.8, 1.2, 0.1] }),
+    );
+    ok("rig.mirror_bones", json!({}));
+    ok(
+        "rig.pose",
+        json!({ "bone": "arm.L", "rotation": [20, 10, 40] }),
+    );
+    let left = tail(&r, "arm.L");
+    let rest_left = {
+        let s = r.document().skeletons.iter().next().unwrap();
+        s.bones[s.index("arm.L").unwrap() as usize].tail
+    };
+    r.execute("anim.pose_mirror", json!({}), Source::Human)
+        .unwrap();
+    let near = |a: Vec3, b: Vec3| a.distance(b) < 1e-3;
+    assert!(
+        near(tail(&r, "arm.R"), left * Vec3::new(-1.0, 1.0, 1.0)),
+        "R took L's pose, mirrored"
+    );
+    assert!(near(tail(&r, "arm.L"), rest_left), "L took R's rest pose");
+
+    // A clip: key arm.L, mirror the clip, play the copy.
+    r.execute("rig.pose_reset", json!({}), Source::Human)
+        .unwrap();
+    r.execute(
+        "anim.clip_new",
+        json!({ "name": "wave", "length": 1.0 }),
+        Source::Human,
+    )
+    .unwrap();
+    r.execute(
+        "anim.key_set",
+        json!({ "bone": "arm.L", "channel": "rotation", "time": 0.5, "value": [20, 10, 40] }),
+        Source::Human,
+    )
+    .unwrap();
+    let reply = r
+        .execute("anim.clip_mirror", json!({ "clip": "wave" }), Source::Human)
+        .unwrap();
+    assert_eq!(reply["name"], "wave mirrored");
+    r.execute(
+        "anim.playhead",
+        json!({ "clip": "wave mirrored", "time": 0.5 }),
+        Source::Human,
+    )
+    .unwrap();
+    assert!(near(tail(&r, "arm.R"), left * Vec3::new(-1.0, 1.0, 1.0)));
+}

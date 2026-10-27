@@ -2470,12 +2470,12 @@ impl Quarry {
                 )),
             )
             .child(
-                checkbox("onion", self.onion, "Onion skin").on_click(cx.listener(
-                    |this, _, _, cx| {
-                        this.onion = !this.onion;
-                        cx.notify();
-                    },
-                )),
+                checkbox(
+                    "onion",
+                    self.reg.document().view.display.onion,
+                    "Onion skin",
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.display("onion", cx))),
             )
             .child(
                 button(

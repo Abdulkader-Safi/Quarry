@@ -398,6 +398,8 @@ pub struct DisplayToggles {
     pub bones: bool,
     pub grid: bool,
     pub backface_culling: bool,
+    /// Faded outlines of the poses at the previous and next keys (FR-ANIM-07).
+    pub onion: bool,
 }
 
 impl Default for DisplayToggles {
@@ -406,6 +408,7 @@ impl Default for DisplayToggles {
             wireframe: false,
             textured: true,
             vertex_color: true,
+            onion: false,
             weights: false,
             bones: true,
             grid: true,

@@ -988,11 +988,13 @@ pub struct ViewDisplay {
     pub bones: Option<bool>,
     pub grid: Option<bool>,
     pub backface_culling: Option<bool>,
+    /// Onion skin: outlines of the poses at the previous and next keys.
+    pub onion: Option<bool>,
 }
 
 impl Command for ViewDisplay {
     const NAME: &'static str = "view.display";
-    const DESCRIPTION: &'static str = "Turn viewport display toggles on or off: wireframe, textured, vertex_color, weights, bones, grid, backface_culling. Saved with the project.";
+    const DESCRIPTION: &'static str = "Turn viewport display toggles on or off: wireframe, textured, vertex_color, weights, bones, grid, backface_culling, onion. Saved with the project.";
     const UNDOABLE: bool = false;
 
     fn run(self, cx: &mut Context) -> CommandResult {
@@ -1009,6 +1011,7 @@ impl Command for ViewDisplay {
         set(&mut d.bones, self.bones);
         set(&mut d.grid, self.grid);
         set(&mut d.backface_culling, self.backface_culling);
+        set(&mut d.onion, self.onion);
         Ok(json!({ "display": *d }))
     }
 }

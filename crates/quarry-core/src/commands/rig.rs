@@ -42,7 +42,10 @@ pub(super) fn skeleton_id(doc: &Document, reference: &str) -> Result<Id<Skeleton
 }
 
 /// The skeleton to use: the named one, or the only one there is.
-fn pick_skeleton(doc: &Document, reference: Option<&str>) -> Result<Id<Skeleton>, CommandError> {
+pub(super) fn pick_skeleton(
+    doc: &Document,
+    reference: Option<&str>,
+) -> Result<Id<Skeleton>, CommandError> {
     match reference {
         Some(r) => skeleton_id(doc, r),
         None if doc.skeletons.len() == 1 => Ok(doc.skeletons.ids().next().expect("one")),

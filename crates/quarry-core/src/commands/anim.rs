@@ -28,6 +28,8 @@ pub(super) fn register(r: &mut CommandRegistry) {
     r.register::<AnimPlay>();
     r.register::<AnimStop>();
     r.register::<AnimCrossfadePreview>();
+    r.register::<AnimPoseMirror>();
+    r.register::<AnimClipMirror>();
     r.register::<QueryClip>();
 }
 
@@ -823,5 +825,135 @@ impl Command for QueryClip {
             .map(|t| json!({ "target": name(&t.target), "channel": t.channel, "keys": t.keys }))
             .collect();
         Ok(json!({ "name": c.name, "length": c.length, "loop": c.looping, "tracks": tracks }))
+    }
+}
+
+// ---- mirror (FR-ANIM-09) ---------------------------------------------------
+
+/// The skeleton's current pose flipped left to right across X: each bone
+/// takes its `.L`/`.R` twin's movement (or its own, for centre bones),
+/// mirrored. Worked out in skeleton space, so bone rolls do not matter as
+/// long as the rest pose is symmetric.
+fn mirrored_pose(s: &Skeleton) -> Vec<BonePose> {
+    let twin: Vec<usize> = s
+        .bones
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            super::rig::mirror_name(&b.name)
+                .and_then(|n| s.index(&n))
+                .map_or(i, |t| t as usize)
+        })
+        .collect();
+    let flip = glam::Mat4::from_scale(Vec3::new(-1.0, 1.0, 1.0));
+    let skin = s.skinning();
+    let rest = s.rest_world();
+    let local = s.rest_local();
+    let target: Vec<glam::Mat4> = (0..s.bones.len())
+        .map(|i| flip * skin[twin[i]] * flip * rest[i])
+        .collect();
+    (0..s.bones.len())
+        .map(|i| {
+            let parent = s.bones[i]
+                .parent
+                .map_or(glam::Mat4::IDENTITY, |p| target[p as usize]);
+            let m = (parent * local[i]).inverse() * target[i];
+            let (scale, rotation, translation) = m.to_scale_rotation_translation();
+            BonePose {
+                translation,
+                rotation: rotation.normalize(),
+                scale,
+            }
+        })
+        .collect()
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AnimPoseMirror {
+    pub skeleton: Option<String>,
+}
+
+impl Command for AnimPoseMirror {
+    const NAME: &'static str = "anim.pose_mirror";
+    const DESCRIPTION: &'static str = "Flip the current pose left to right: .L bones take the .R bones' pose and the other way round, mirrored across X.";
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let doc = cx.doc();
+        let sid = super::rig::pick_skeleton(doc, self.skeleton.as_deref())?;
+        let s = doc.skeletons.get_mut(sid).expect("resolved");
+        s.pose.resize(s.bones.len(), BonePose::default());
+        s.pose = mirrored_pose(s);
+        Ok(json!({ "bones": s.bones.len() }))
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AnimClipMirror {
+    /// Clip to mirror. Default the shown clip.
+    pub clip: Option<String>,
+    /// Name of the new clip. Default "<clip> mirrored".
+    pub name: Option<String>,
+}
+
+impl Command for AnimClipMirror {
+    const NAME: &'static str = "anim.clip_mirror";
+    const DESCRIPTION: &'static str = "Make a left-right mirrored copy of a clip (.L and .R tracks swapped). The copy has rotation and translation keys for every bone at the original key times, with IK already solved into rotations; the original is untouched.";
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let doc = cx.doc();
+        let id = active_clip(doc, self.clip.as_deref())?;
+        let source = doc.clips.get(id).expect("resolved").clone();
+        let s = doc
+            .skeletons
+            .get(source.skeleton)
+            .ok_or_else(|| CommandError::not_found("The clip's skeleton is gone."))?
+            .clone();
+        let name = self
+            .name
+            .unwrap_or_else(|| format!("{} mirrored", source.name));
+        unique_clip_name(doc, source.skeleton, &name, None)?;
+        let mut times: Vec<f32> = source
+            .tracks
+            .iter()
+            .flat_map(|t| t.keys.iter().map(|k| k.time))
+            .collect();
+        times.sort_by(f32::total_cmp);
+        times.dedup_by(|a, b| (*a - *b).abs() < 1e-4);
+        let mut clip = Clip {
+            id: Id::new(0, 0),
+            name: name.clone(),
+            skeleton: source.skeleton,
+            length: source.length,
+            looping: source.looping,
+            tracks: Vec::new(),
+        };
+        for &time in &times {
+            let pose = mirrored_pose(&source.pose_at(&s, time));
+            for (b, p) in pose.iter().enumerate() {
+                let key = |value| Key {
+                    time,
+                    value,
+                    interp: Interp::Linear,
+                    handles: None,
+                };
+                let target = TrackTarget::Bone(b as u16);
+                upsert(
+                    &mut clip,
+                    target,
+                    Channel::Rotation,
+                    key(KeyValue::Quat(p.rotation)),
+                );
+                upsert(
+                    &mut clip,
+                    target,
+                    Channel::Translation,
+                    key(KeyValue::Vec3(p.translation)),
+                );
+            }
+        }
+        let new = doc.clips.insert(clip);
+        Ok(json!({ "clip": new, "name": name, "keys": times.len() }))
     }
 }

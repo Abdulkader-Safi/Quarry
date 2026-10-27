@@ -277,6 +277,8 @@ impl Quarry {
             ],
             "Animate" => vec![
                 ("New clip", "anim.clip_new"),
+                ("Mirror pose left to right", "anim.pose_mirror"),
+                ("Mirror clip into a copy", "anim.clip_mirror"),
                 ("Play or pause", "@play"),
                 ("Stop", "anim.stop"),
                 ("Auto-key on or off", "anim.autokey"),

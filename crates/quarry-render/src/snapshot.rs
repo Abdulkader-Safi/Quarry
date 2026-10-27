@@ -69,26 +69,7 @@ pub fn snapshot_with(doc: &Document, highlight: bool) -> Snapshot {
             .filter(|_| mesh.weights.len() == mesh.positions.len())
             .and_then(|k| doc.skeletons.get(k.skeleton))
             .map(|s| s.skinning());
-        let points: Vec<Vec3> = mesh
-            .positions
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                let p = world.transform_point3(*p);
-                match &skinning {
-                    Some(m) => {
-                        let w = mesh.weights[i];
-                        (0..4).fold(Vec3::ZERO, |acc, k| {
-                            acc + m
-                                .get(w.bones[k] as usize)
-                                .map_or(p, |m| m.transform_point3(p))
-                                * w.weights[k]
-                        })
-                    }
-                    None => p,
-                }
-            })
-            .collect();
+        let points = posed_points(mesh, world, skinning.as_deref());
         let sel = &doc.selection;
         let tint = if !highlight {
             Tint::None
@@ -136,6 +117,9 @@ pub fn snapshot_with(doc: &Document, highlight: bool) -> Snapshot {
             }
         }
     }
+    if doc.view.display.onion {
+        onion_skin(doc, &mut line);
+    }
     if highlight {
         // The crosshair: short X, Y and Z ticks in the axis colours.
         let c = doc.view.cursor;
@@ -150,6 +134,81 @@ pub fn snapshot_with(doc: &Document, highlight: bool) -> Snapshot {
         bounds,
         grid_step: doc.settings.grid_step,
         overlay,
+    }
+}
+
+/// World positions of a mesh's vertices, skinned when `skinning` is given.
+fn posed_points(mesh: &Mesh, world: glam::Mat4, skinning: Option<&[glam::Mat4]>) -> Vec<Vec3> {
+    mesh.positions
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let p = world.transform_point3(*p);
+            match skinning {
+                Some(m) => {
+                    let w = mesh.weights[i];
+                    (0..4).fold(Vec3::ZERO, |acc, k| {
+                        acc + m
+                            .get(w.bones[k] as usize)
+                            .map_or(p, |m| m.transform_point3(p))
+                            * w.weights[k]
+                    })
+                }
+                None => p,
+            }
+        })
+        .collect()
+}
+
+/// FR-ANIM-07: the shown clip's poses at the keys either side of the
+/// playhead, as dim edge outlines of every mesh skinned to its skeleton
+/// (warm before, cool after).
+fn onion_skin(doc: &Document, line: &mut impl FnMut(Vec3, Vec3, [f32; 4])) {
+    let Some(clip) = doc.view.anim.clip.and_then(|c| doc.clips.get(c)) else {
+        return;
+    };
+    let Some(skeleton) = doc.skeletons.get(clip.skeleton) else {
+        return;
+    };
+    let now = doc.view.anim.time;
+    let mut times: Vec<f32> = clip
+        .tracks
+        .iter()
+        .flat_map(|t| t.keys.iter().map(|k| k.time))
+        .collect();
+    times.sort_by(f32::total_cmp);
+    let before = times.iter().rev().find(|t| **t < now - 1e-4);
+    let after = times.iter().find(|t| **t > now + 1e-4);
+    for (time, color) in [
+        (before, [0.55, 0.32, 0.18, 1.0]),
+        (after, [0.2, 0.38, 0.6, 1.0]),
+    ] {
+        let Some(&time) = time else { continue };
+        let skinning = clip.pose_at(skeleton, time).skinning();
+        for object in doc.objects.iter().filter(|o| o.visible) {
+            let skinned = object
+                .skin
+                .as_ref()
+                .is_some_and(|k| k.skeleton == clip.skeleton);
+            let Some(mesh) = doc
+                .drawn_mesh(object)
+                .filter(|m| skinned && m.weights.len() == m.positions.len())
+            else {
+                continue;
+            };
+            let points = posed_points(mesh, doc.world_matrix(object), Some(&skinning));
+            let mut edges = std::collections::BTreeSet::new();
+            for f in mesh.faces.iter().filter(|f| !f.hidden) {
+                let c = &f.corners;
+                for i in 0..c.len() {
+                    let (a, b) = (c[i].vertex, c[(i + 1) % c.len()].vertex);
+                    edges.insert((a.min(b), a.max(b)));
+                }
+            }
+            for (a, b) in edges {
+                line(points[a as usize], points[b as usize], color);
+            }
+        }
     }
 }
 
@@ -350,5 +409,42 @@ mod pose_tests {
             "the box now lies along -X: {posed:?}"
         );
         assert!(posed.0.x < -0.9);
+    }
+
+    #[test]
+    fn onion_skin_outlines_the_keys_either_side_of_the_playhead() {
+        let mut r = CommandRegistry::new();
+        let mut run = |n: &str, a: serde_json::Value| {
+            r.execute(n, a, Source::Human)
+                .unwrap_or_else(|e| panic!("{n}: {}", e.message));
+        };
+        run("rig.skeleton_new", json!({}));
+        run(
+            "rig.bone_add",
+            json!({ "name": "arm", "head": [0, 0, 0], "tail": [0, 1, 0] }),
+        );
+        run(
+            "mesh.add_primitive",
+            json!({ "kind": "box", "name": "Box" }),
+        );
+        run("rig.bind_rigid", json!({ "object": "Box", "bone": "arm" }));
+        run("anim.clip_new", json!({ "name": "swing", "length": 1.0 }));
+        for (t, z) in [(0.0, 0), (1.0, 60)] {
+            run(
+                "anim.key_set",
+                json!({ "bone": "arm", "channel": "rotation", "time": t, "value": [0, 0, z] }),
+            );
+        }
+        run("anim.playhead", json!({ "time": 0.5 }));
+        run("view.display", json!({ "bones": false }));
+        let lines = |r: &CommandRegistry| snapshot(r.document()).overlay.len() / 2;
+        assert_eq!(lines(&r), 0);
+        r.execute("view.display", json!({ "onion": true }), Source::Human)
+            .unwrap();
+        assert_eq!(
+            lines(&r),
+            2 * 12,
+            "a box's 12 edges at each neighbouring key"
+        );
     }
 }
