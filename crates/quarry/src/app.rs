@@ -1925,7 +1925,9 @@ impl Quarry {
             && self.overlay == Overlay::Settings
         {
             if chord != "escape" {
-                let taken = crate::keys::rebind(&mut self.settings.shortcuts, action, &chord);
+                let preset = crate::keys::preset(self.blender_keys());
+                let taken =
+                    crate::keys::rebind(&mut self.settings.shortcuts, &preset, action, &chord);
                 self.rebind_note = taken.map(|t| {
                     format!(
                         "{} was on {t}, which now has no key.",
@@ -1945,7 +1947,7 @@ impl Quarry {
             cx.notify();
             return;
         }
-        let Some(action) = crate::keys::action_for(&self.settings.shortcuts, &chord) else {
+        let Some(action) = crate::keys::action_for(&self.keymap(), &chord) else {
             return;
         };
         let global = chord.starts_with("cmd+");
@@ -1957,6 +1959,15 @@ impl Quarry {
             return;
         }
         self.run_action(action, window, cx);
+    }
+
+    pub fn blender_keys(&self) -> bool {
+        self.settings.shortcut_preset == quarry_io::settings::ShortcutPreset::Blender
+    }
+
+    /// The keymap in force: preset, then the user's changes.
+    pub fn keymap(&self) -> std::collections::BTreeMap<String, String> {
+        crate::keys::layered(self.blender_keys(), &self.settings.shortcuts)
     }
 
     /// Run a keymap action (see `keys::ACTIONS`).

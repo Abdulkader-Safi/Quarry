@@ -5,7 +5,7 @@ priority: "critical"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-27T13:45:00.000Z"
+modified: "2026-10-28T00:00:00.000Z"
 labels: ["m1", "ui"]
 order: 19
 ---
@@ -29,4 +29,7 @@ FR-UI-02 and FR-UI-03, driven by the registry rather than a hand-kept list.
 ⌘K palette lists every registry command with fuzzy match, arrow keys and Enter. Shortcuts page in Settings lists the keys.
 
 **Rebinding (2026-10-27)**
-One keymap (`crates/quarry/src/keys.rs`) drives the keyboard, the Settings list, the palette hints, the menus and the view's hint bar. Click a key in Settings, press the new one (Esc cancels). If another action held it, that action is left with no key and the note under the list names it. Overrides save to `settings.shortcuts`; Reset to default clears them. Not built: the Blender-style preset (the selector still shows "Quarry default" only).
+One keymap (`crates/quarry/src/keys.rs`) drives the keyboard, the Settings list, the palette hints, the menus and the view's hint bar. Click a key in Settings, press the new one (Esc cancels). If another action held it, that action is left with no key and the note under the list names it. Overrides save to `settings.shortcuts`; Reset to default clears them. 
+
+**Blender-style preset (2026-10-27)**
+Settings > Shortcuts switches between Quarry and Blender-style (saved in settings). The preset is a short list of changes (F3 search, X delete, S scale, `.` frame, ⇧A add bone; WASD crosshair keys unbound since S scales); your own changes sit on top of whichever preset is on, and binding a key back to the preset's leaves no override. Test in `keys.rs`.

@@ -35,6 +35,40 @@ pub const ACTIONS: &[(&str, &str, &str, &str)] = &[
     ("anim.play", "Play or pause", "Animate", "space"),
 ];
 
+/// The Blender-style preset: what it changes from the defaults. Its S scales,
+/// so the crosshair keys (WASD) are left unbound.
+pub const BLENDER: &[(&str, &str)] = &[
+    ("palette", "f3"),
+    ("mesh.delete", "x"),
+    ("tool.scale", "s"),
+    ("view.frame", "."),
+    ("rig.bone_add", "shift+a"),
+    ("cursor.forward", ""),
+    ("cursor.back", ""),
+    ("cursor.left", ""),
+    ("cursor.right", ""),
+    ("cursor.down", ""),
+    ("cursor.up", ""),
+];
+
+/// The preset's changes as overrides (empty for Quarry's own).
+pub fn preset(blender: bool) -> BTreeMap<String, String> {
+    if !blender {
+        return BTreeMap::new();
+    }
+    BLENDER
+        .iter()
+        .map(|(a, c)| (a.to_string(), c.to_string()))
+        .collect()
+}
+
+/// The keymap in force: the preset, then the user's own changes on top.
+pub fn layered(blender: bool, user: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+    let mut map = preset(blender);
+    map.extend(user.iter().map(|(a, c)| (a.clone(), c.clone())));
+    map
+}
+
 /// Mouse bindings, shown in the list but not rebindable.
 pub const MOUSE: &[(&str, &str, &str)] = &[
     ("Place tile", "Tiles", "Click"),
@@ -80,22 +114,28 @@ pub fn action_for(overrides: &BTreeMap<String, String>, chord: &str) -> Option<&
         .find(|a| !chord.is_empty() && bound(overrides, a) == chord)
 }
 
-/// Bind `action` to `chord`. Another action holding the chord is unbound;
-/// its label comes back so the caller can say so.
+/// Bind `action` to `chord` in the user's overrides, on top of `preset`.
+/// Another action holding the chord is unbound; its label comes back so the
+/// caller can say so.
 pub fn rebind(
-    overrides: &mut BTreeMap<String, String>,
+    user: &mut BTreeMap<String, String>,
+    preset: &BTreeMap<String, String>,
     action: &str,
     chord: &str,
 ) -> Option<&'static str> {
-    let taken = action_for(overrides, chord).filter(|a| *a != action);
+    let merged = {
+        let mut m = preset.clone();
+        m.extend(user.iter().map(|(a, c)| (a.clone(), c.clone())));
+        m
+    };
+    let taken = action_for(&merged, chord).filter(|a| *a != action);
     if let Some(other) = taken {
-        overrides.insert(other.into(), String::new());
+        user.insert(other.into(), String::new());
     }
-    let default = ACTIONS.iter().find(|a| a.0 == action).map(|a| a.3);
-    if default == Some(chord) {
-        overrides.remove(action);
+    if bound(preset, action) == chord {
+        user.remove(action);
     } else {
-        overrides.insert(action.into(), chord.into());
+        user.insert(action.into(), chord.into());
     }
     taken.and_then(|t| ACTIONS.iter().find(|a| a.0 == t).map(|a| a.1))
 }
@@ -137,20 +177,39 @@ pub fn display(chord: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{action_for, bound, rebind};
+    use super::{action_for, bound, layered, preset, rebind};
     use std::collections::BTreeMap;
 
     #[::core::prelude::v1::test]
     fn rebinding_takes_the_chord_from_its_old_owner() {
-        let mut o = BTreeMap::new();
+        let (mut o, none) = (BTreeMap::new(), BTreeMap::new());
         assert_eq!(action_for(&o, "e"), Some("mesh.extrude"));
         // Give Extrude's E to Frame selection.
-        assert_eq!(rebind(&mut o, "view.frame", "e"), Some("Extrude"));
+        assert_eq!(rebind(&mut o, &none, "view.frame", "e"), Some("Extrude"));
         assert_eq!(action_for(&o, "e"), Some("view.frame"));
         assert_eq!(bound(&o, "mesh.extrude"), "");
         assert_eq!(action_for(&o, "f"), None);
         // Back to the default leaves no override for it.
-        rebind(&mut o, "view.frame", "f");
+        rebind(&mut o, &none, "view.frame", "f");
         assert!(!o.contains_key("view.frame"));
+    }
+
+    #[::core::prelude::v1::test]
+    fn the_blender_preset_layers_under_the_users_changes() {
+        let blender = preset(true);
+        let mut user = BTreeMap::new();
+        let map = layered(true, &user);
+        assert_eq!(
+            action_for(&map, "s"),
+            Some("tool.scale"),
+            "S scales, not the crosshair"
+        );
+        assert_eq!(action_for(&map, "x"), Some("mesh.delete"));
+        assert_eq!(bound(&map, "cursor.back"), "");
+        // Setting a key back to the preset's own leaves no user override.
+        rebind(&mut user, &blender, "tool.scale", "t");
+        assert_eq!(bound(&layered(true, &user), "tool.scale"), "t");
+        rebind(&mut user, &blender, "tool.scale", "s");
+        assert!(!user.contains_key("tool.scale"));
     }
 }

@@ -299,7 +299,7 @@ impl Quarry {
                 a => a,
             };
             let key = if crate::keys::ACTIONS.iter().any(|a| a.0 == bound) {
-                crate::keys::display(crate::keys::bound(&self.settings.shortcuts, bound))
+                crate::keys::display(crate::keys::bound(&self.keymap(), bound))
             } else {
                 String::new()
             };
@@ -874,7 +874,7 @@ impl Quarry {
                     .child(text("Mirror", Type::Caption, p.text_muted))
                     .child(text(mirror, Type::MonoS, p.text_primary))
                     .child(divider_v(14.0));
-                let key = |a| crate::keys::display(crate::keys::bound(&self.settings.shortcuts, a));
+                let key = |a| crate::keys::display(crate::keys::bound(&self.keymap(), a));
                 for (label, key) in [
                     ("Extrude", key("mesh.extrude")),
                     ("Frame", key("view.frame")),

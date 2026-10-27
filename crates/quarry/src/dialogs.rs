@@ -90,7 +90,7 @@ impl Quarry {
                     )
                     .child(text(
                         if crate::keys::ACTIONS.iter().any(|a| a.0 == name) {
-                            crate::keys::display(crate::keys::bound(&self.settings.shortcuts, name))
+                            crate::keys::display(crate::keys::bound(&self.keymap(), name))
                         } else {
                             String::new()
                         },
@@ -535,8 +535,7 @@ impl Quarry {
                         markers + collision + props > 0,
                     )),
             );
-        let again =
-            crate::keys::display(crate::keys::bound(&self.settings.shortcuts, "export.again"));
+        let again = crate::keys::display(crate::keys::bound(&self.keymap(), "export.again"));
         let body = body.child(
             checkbox(
                 "remember",
@@ -819,7 +818,7 @@ impl Quarry {
             let key = if on {
                 "Press a key".to_string()
             } else {
-                crate::keys::display(crate::keys::bound(&self.settings.shortcuts, action))
+                crate::keys::display(crate::keys::bound(&self.keymap(), action))
             };
             let chip = chip(format!("key-{action}").into(), key, on)
                 .cursor_pointer()
@@ -859,7 +858,28 @@ impl Quarry {
                         )
                         .flex_1(),
                     )
-                    .child(select("preset-keys", "Quarry default").w(px(170.0))),
+                    .child(segmented(
+                        "preset-keys",
+                        &["Quarry", "Blender-style"],
+                        self.blender_keys() as usize,
+                        false,
+                        {
+                            let entity = cx.entity();
+                            move |i, _, cx| {
+                                entity.update(cx, |this, cx| {
+                                    this.settings.shortcut_preset = if i == 1 {
+                                        quarry_io::settings::ShortcutPreset::Blender
+                                    } else {
+                                        quarry_io::settings::ShortcutPreset::Default
+                                    };
+                                    if let Some(dirs) = &this.dirs {
+                                        let _ = this.settings.save(dirs);
+                                    }
+                                    cx.notify();
+                                })
+                            }
+                        },
+                    )),
             )
             .child(
                 list.id("shortcut-list")
