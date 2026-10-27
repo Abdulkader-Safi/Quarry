@@ -5075,9 +5075,12 @@ dependencies = [
  "objc2-io-surface",
  "objc2-metal 0.3.2",
  "pollster 1.0.1",
+ "quarry-core",
  "quarry-io",
+ "quarry-ops",
  "quarry-render",
  "quarry-server",
+ "serde_json",
  "tracing",
  "wgpu 30.0.1",
 ]
@@ -5108,6 +5111,7 @@ dependencies = [
  "notify-debouncer-full",
  "psd",
  "quarry-core",
+ "quarry-ops",
  "serde",
  "serde_json",
  "tracing",
@@ -8701,7 +8705,9 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "image",
+ "quarry-core",
  "quarry-io",
+ "serde_json",
 ]
 
 [[package]]

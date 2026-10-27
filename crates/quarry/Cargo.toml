@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 gpui-kit.workspace = true
+quarry-core = { path = "../quarry-core" }
+quarry-ops = { path = "../quarry-ops" }
 quarry-render = { path = "../quarry-render" }
 quarry-io = { path = "../quarry-io" }
 quarry-server = { path = "../quarry-server" }
@@ -17,6 +19,7 @@ glam.workspace = true
 tracing.workspace = true
 pollster.workspace = true
 image = { workspace = true }
+serde_json.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true

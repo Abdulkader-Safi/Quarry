@@ -1,4 +1,15 @@
-//! M0 viewport spike: a GPUI window showing a wgpu-rendered scene.
+//! Quarry: the editor window (start screen, editor, dialogs) built from the
+//! Figma design, plus the headless server and the M0 renderer checks.
+
+mod app;
+mod assets;
+mod dialogs;
+mod editor;
+mod panels;
+mod start;
+mod theme;
+mod ui;
+mod viewport;
 
 #[cfg(target_os = "macos")]
 mod pen;
@@ -166,6 +177,10 @@ fn main() {
 
     let quit_after = number("--secs").map(Duration::from_secs_f32);
     let latency_check = has("--latency-check");
+    if !has("--spike") {
+        run_editor(quit_after);
+        return;
+    }
 
     gpui_kit::application().run(move |cx| {
         gpui_kit::init(cx);
@@ -202,6 +217,81 @@ fn main() {
             eprintln!("failed to open the spike window: {e}");
         }
     });
+}
+
+/// The editor window. `--secs N` closes it after N seconds (smoke tests).
+fn run_editor(quit_after: Option<Duration>) {
+    if let Ok(dirs) = quarry_io::settings::Dirs::from_env() {
+        std::mem::forget(quarry_io::logging::init(&dirs));
+    }
+    gpui_kit::application()
+        .with_assets(assets::Assets)
+        .run(move |cx| {
+            gpui_kit::init(cx);
+            theme::load_fonts(cx);
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                    None,
+                    size(px(1600.0), px(900.0)),
+                    cx,
+                ))),
+                titlebar: Some(TitlebarOptions {
+                    title: Some("Quarry".into()),
+                    appears_transparent: true,
+                    traffic_light_position: Some(point(px(14.0), px(16.0))),
+                }),
+                window_min_size: Some(size(px(1100.0), px(640.0))),
+                ..Default::default()
+            };
+            let opened = gpui_kit::open_window(options, cx, |window, cx| {
+                cx.new(|cx| app::Quarry::new(window, cx))
+            });
+            if let Err(e) = opened {
+                eprintln!("failed to open the Quarry window: {e}");
+                cx.quit();
+            }
+            if let Some(limit) = quit_after {
+                cx.spawn(async move |cx| {
+                    cx.background_executor().timer(limit).await;
+                    cx.update(|cx| cx.quit());
+                })
+                .detach();
+            }
+        });
+}
+
+impl Render for app::Quarry {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if window.focused(cx).is_none() {
+            window.focus(&self.focus, cx);
+        }
+        let body = match self.screen {
+            app::Screen::Start => self.render_start(cx),
+            app::Screen::Editor => self.render_editor(window, cx),
+        };
+        let p = theme::t();
+        div()
+            .id("root")
+            .relative()
+            .size_full()
+            .bg(p.bg_app)
+            .font_family(theme::SANS)
+            .text_color(p.text_primary)
+            .track_focus(&self.focus)
+            .on_key_down(cx.listener(|this, e, window, cx| this.key_down(e, window, cx)))
+            .on_mouse_move(cx.listener(|this, e, _, cx| this.root_mouse_move(e, cx)))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _, _, cx| this.root_mouse_up(cx)),
+            )
+            .on_mouse_up(
+                MouseButton::Middle,
+                cx.listener(|this, _, _, cx| this.root_mouse_up(cx)),
+            )
+            .child(body)
+            .children(self.render_toast(cx))
+            .children(self.render_overlay(cx))
+    }
 }
 
 /// `quarry --headless [--socket <path>] [--dir <folder>] [--commands <file.jsonl>]`
