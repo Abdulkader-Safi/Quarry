@@ -198,3 +198,42 @@ fn unwrap_fits_inside_the_faces_texture() {
             .all(|c| c.uv.x <= 32.0 + 1e-3 && c.uv.y <= 32.0 + 1e-3)
     );
 }
+
+#[test]
+fn packing_keeps_islands_apart_and_inside_the_texture() {
+    let mut r = editing("cylinder");
+    run(
+        &mut r,
+        "paint.texture_new",
+        json!({ "width": 64, "height": 64 }),
+    );
+    // Every edge a seam: each face is its own island.
+    run(&mut r, "select.mode", json!({ "mode": "edge" }));
+    run(&mut r, "select.all", json!({}));
+    run(&mut r, "uv.mark_seam", json!({}));
+    run(&mut r, "select.mode", json!({ "mode": "face" }));
+    run(&mut r, "select.none", json!({}));
+    run(&mut r, "uv.unwrap", json!({}));
+    let reply = run(&mut r, "uv.pack", json!({}));
+    let islands = reply["islands"].as_u64().unwrap();
+    assert!(islands >= 10, "{islands} islands");
+    let m = mesh(&r);
+    let boxes: Vec<(Vec2, Vec2)> = (0..m.faces.len())
+        .map(|f| {
+            polygon(m, f)
+                .into_iter()
+                .fold((Vec2::MAX, Vec2::MIN), |(lo, hi), p| (lo.min(p), hi.max(p)))
+        })
+        .collect();
+    for (i, (lo, hi)) in boxes.iter().enumerate() {
+        assert!(
+            lo.min_element() >= -1e-3 && hi.max_element() <= 64.0 + 1e-3,
+            "inside 0-1"
+        );
+        for (lo2, hi2) in &boxes[i + 1..] {
+            let gap_x = (lo2.x - hi.x).max(lo.x - hi2.x);
+            let gap_y = (lo2.y - hi.y).max(lo.y - hi2.y);
+            assert!(gap_x.max(gap_y) >= 1.0 - 1e-3, "islands 1 px apart");
+        }
+    }
+}

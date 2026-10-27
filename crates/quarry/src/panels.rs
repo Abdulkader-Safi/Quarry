@@ -1563,7 +1563,8 @@ impl Quarry {
                 button("pack", ButtonStyle::Secondary, "Pack islands", Some("grid"))
                     .w_full()
                     .on_click(cx.listener(|this, _, _, cx| {
-                        this.run("uv.unwrap", json!({}), cx);
+                        let padding = this.uv_padding;
+                        this.run("uv.pack", json!({ "padding": padding }), cx);
                     }))
                     .into_any_element(),
             );

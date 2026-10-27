@@ -19,6 +19,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
     r.register::<UvUnwrap>();
     r.register::<UvProjectView>();
     r.register::<UvSnapPixels>();
+    r.register::<UvPack>();
 }
 
 /// The edited mesh and the faces to work on: the selected faces in face mode,
@@ -267,7 +268,6 @@ impl Command for UvUnwrap {
 
         // Up the surface is up the image, whose rows run down.
         let to_px = |p: Vec2| Vec2::new(p.x, -p.y) * px;
-        // Shelf-pack islands in pixels with 1 px between them.
         let boxes: Vec<(Vec2, Vec2)> = islands
             .iter()
             .map(|island| {
@@ -279,37 +279,146 @@ impl Command for UvUnwrap {
                     })
             })
             .collect();
-        let area: f32 = boxes
-            .iter()
-            .map(|(lo, hi)| (hi.x - lo.x + PADDING) * (hi.y - lo.y + PADDING))
-            .sum();
-        let widest = boxes.iter().map(|(lo, hi)| hi.x - lo.x).fold(0.0, f32::max);
-        let row_limit = (area.sqrt() * 1.3).max(widest);
-        let mut order: Vec<usize> = (0..islands.len()).collect();
-        order.sort_by(|a, b| {
-            (boxes[*b].1.y - boxes[*b].0.y).total_cmp(&(boxes[*a].1.y - boxes[*a].0.y))
-        });
-        let (mut x, mut y, mut row_h) = (0.0f32, 0.0f32, 0.0f32);
-        let mut offset = vec![Vec2::ZERO; islands.len()];
-        for i in order {
-            let (lo, hi) = boxes[i];
-            let size = hi - lo;
-            if x > 0.0 && x + size.x > row_limit {
-                (x, y, row_h) = (0.0, y + row_h + PADDING, 0.0);
-            }
-            offset[i] = Vec2::new(x, y) - lo;
-            x += size.x + PADDING;
-            row_h = row_h.max(size.y);
-        }
-        // Shrink the whole layout to fit the faces' image if it is too big.
-        let extent = (0..islands.len()).fold(Vec2::ZERO, |m, i| m.max(boxes[i].1 + offset[i]));
-        let shrink = fit.map_or(1.0, |size| {
-            (size / extent.max(Vec2::ONE)).min_element().min(1.0)
-        });
+        let (offset, shrink) = layout(&boxes, fit, PADDING);
         for (i, island) in islands.iter().enumerate() {
             for f in island {
                 for c in &mut mesh.faces[*f].corners {
                     c.uv = (to_px(placed[f][&c.vertex]) + offset[i]) * shrink;
+                }
+            }
+        }
+        Ok(json!({ "faces": faces.len(), "islands": islands.len(), "scale": shrink }))
+    }
+}
+
+/// Shelf-pack island boxes (pixels): tallest first, rows about square. When
+/// the layout is bigger than `fit` it is shrunk to fit, and packed again with
+/// wider gaps so `padding` px are left after shrinking (FR-UV-03).
+/// Returns each box's offset and the scale to apply after offsetting.
+fn layout(boxes: &[(Vec2, Vec2)], fit: Option<Vec2>, padding: f32) -> (Vec<Vec2>, f32) {
+    let shelf = |pad: f32| {
+        let area: f32 = boxes
+            .iter()
+            .map(|(lo, hi)| (hi.x - lo.x + pad) * (hi.y - lo.y + pad))
+            .sum();
+        let widest = boxes.iter().map(|(lo, hi)| hi.x - lo.x).fold(0.0, f32::max);
+        let row_limit = (area.sqrt() * 1.3).max(widest);
+        let mut order: Vec<usize> = (0..boxes.len()).collect();
+        order.sort_by(|a, b| {
+            (boxes[*b].1.y - boxes[*b].0.y).total_cmp(&(boxes[*a].1.y - boxes[*a].0.y))
+        });
+        let (mut x, mut y, mut row_h) = (0.0f32, 0.0f32, 0.0f32);
+        let mut offset = vec![Vec2::ZERO; boxes.len()];
+        for i in order {
+            let (lo, hi) = boxes[i];
+            let size = hi - lo;
+            if x > 0.0 && x + size.x > row_limit {
+                (x, y, row_h) = (0.0, y + row_h + pad, 0.0);
+            }
+            offset[i] = Vec2::new(x, y) - lo;
+            x += size.x + pad;
+            row_h = row_h.max(size.y);
+        }
+        let extent = (0..boxes.len()).fold(Vec2::ZERO, |m, i| m.max(boxes[i].1 + offset[i]));
+        (offset, extent)
+    };
+    let scale = |extent: Vec2| {
+        fit.map_or(1.0, |size| {
+            (size / extent.max(Vec2::ONE)).min_element().min(1.0)
+        })
+    };
+    let (mut offset, mut extent) = shelf(padding);
+    let mut shrink = scale(extent);
+    // Wider gaps make the layout a little bigger, so settle in a few rounds.
+    for _ in 0..4 {
+        if shrink >= 1.0 {
+            break;
+        }
+        (offset, extent) = shelf(padding / shrink);
+        let next = scale(extent);
+        if (next - shrink).abs() < 1e-4 {
+            break;
+        }
+        shrink = next.min(shrink);
+    }
+    (offset, shrink)
+}
+
+type EdgeSide = (usize, Vec2, Vec2);
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UvPack {
+    /// Pixels between islands. Default 1.
+    pub padding: Option<u32>,
+}
+
+impl Command for UvPack {
+    const NAME: &'static str = "uv.pack";
+    const DESCRIPTION: &'static str = "Lay out the UV islands of the selected faces (all faces when none are selected) without overlap, `padding` px apart, shrunk to fit inside their image if needed. Islands keep their shape.";
+
+    fn run(self, cx: &mut Context) -> CommandResult {
+        let padding = self.padding.map_or(PADDING, |p| p.min(64) as f32);
+        let fit = image_size(cx);
+        let (faces, _, mesh) = faces_and_mesh(cx)?;
+        // Islands: faces joined by an edge whose two UV ends match on both sides.
+        // Per edge: (face, UV at the lower vertex, UV at the higher vertex).
+        let mut by_edge: BTreeMap<(u32, u32), Vec<EdgeSide>> = BTreeMap::new();
+        for &f in &faces {
+            let c = &mesh.faces[f].corners;
+            for k in 0..c.len() {
+                let (a, b) = (c[k], c[(k + 1) % c.len()]);
+                let (lo, hi) = if a.vertex < b.vertex { (a, b) } else { (b, a) };
+                by_edge
+                    .entry(edge(a.vertex, b.vertex))
+                    .or_default()
+                    .push((f, lo.uv, hi.uv));
+            }
+        }
+        let mut island_of: BTreeMap<usize, usize> = BTreeMap::new();
+        let mut islands: Vec<Vec<usize>> = Vec::new();
+        for &start in &faces {
+            if island_of.contains_key(&start) {
+                continue;
+            }
+            let id = islands.len();
+            island_of.insert(start, id);
+            let mut island = vec![start];
+            let mut queue = VecDeque::from([start]);
+            while let Some(f) = queue.pop_front() {
+                let c = &mesh.faces[f].corners;
+                for k in 0..c.len() {
+                    let e = edge(c[k].vertex, c[(k + 1) % c.len()].vertex);
+                    let sides = &by_edge[&e];
+                    let Some(&(_, ua, ub)) = sides.iter().find(|s| s.0 == f) else {
+                        continue;
+                    };
+                    for &(g, va, vb) in sides {
+                        let joined = ua.distance(va) < 1e-3 && ub.distance(vb) < 1e-3;
+                        if joined && !island_of.contains_key(&g) {
+                            island_of.insert(g, id);
+                            island.push(g);
+                            queue.push_back(g);
+                        }
+                    }
+                }
+            }
+            islands.push(island);
+        }
+        let boxes: Vec<(Vec2, Vec2)> = islands
+            .iter()
+            .map(|island| {
+                island
+                    .iter()
+                    .flat_map(|f| mesh.faces[*f].corners.iter().map(|c| c.uv))
+                    .fold((Vec2::MAX, Vec2::MIN), |(lo, hi), p| (lo.min(p), hi.max(p)))
+            })
+            .collect();
+        let (offset, shrink) = layout(&boxes, fit, padding);
+        for (i, island) in islands.iter().enumerate() {
+            for f in island {
+                for c in &mut mesh.faces[*f].corners {
+                    c.uv = (c.uv + offset[i]) * shrink;
                 }
             }
         }
