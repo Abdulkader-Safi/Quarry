@@ -245,6 +245,9 @@ fn run_editor(quit_after: Option<Duration>) {
                 window_min_size: Some(size(px(1100.0), px(640.0))),
                 ..Default::default()
             };
+            // Pen pressure for the paint brush (FR-PAINT-03); macOS only so far.
+            #[cfg(target_os = "macos")]
+            pen::install();
             let opened = gpui_kit::open_window(options, cx, |window, cx| {
                 cx.new(|cx| app::Quarry::new(window, cx))
             });

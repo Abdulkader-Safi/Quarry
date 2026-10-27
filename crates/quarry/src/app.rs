@@ -249,6 +249,8 @@ pub struct Quarry {
     /// An edge being dragged: which, pointer start, size at start.
     pub panel_drag: Option<(PanelEdge, f32, f32)>,
     paint_stroke: Option<Vec<[f32; 3]>>,
+    /// Pen pressure per stroke point; None for a point made with a mouse.
+    paint_pressure: Vec<Option<f32>>,
     pub export_selected: bool,
     pub export_scale: f32,
     pub connect_tab: usize,
@@ -382,6 +384,7 @@ impl Quarry {
             bottom_h: 300.0,
             panel_drag: None,
             paint_stroke: None,
+            paint_pressure: Vec::new(),
             export_selected: false,
             export_scale: 1.0,
             connect_tab: 0,
@@ -1134,6 +1137,7 @@ impl Quarry {
             Tool::Pencil | Tool::Eraser | Tool::VertexColor => {
                 if let Some((_, _, p)) = crate::viewport::pick(doc, origin, dir) {
                     self.paint_stroke = Some(vec![p.to_array()]);
+                    self.paint_pressure = vec![pen_pressure()];
                 }
             }
             Tool::Weights | Tool::WeightFill => self.paint_weights(origin, dir, cx),
@@ -1176,6 +1180,7 @@ impl Quarry {
             && let Some((_, _, p)) = crate::viewport::pick(doc, origin, dir)
         {
             stroke.push(p.to_array());
+            self.paint_pressure.push(pen_pressure());
         }
     }
 
@@ -1221,11 +1226,13 @@ impl Quarry {
             } else {
                 self.paint_rgba
             };
-            self.run(
-                "paint.stroke_3d",
-                json!({ "points": points, "rgba": rgba, "size": self.brush_px }),
-                cx,
-            );
+            let mut args = json!({ "points": points, "rgba": rgba, "size": self.brush_px });
+            // Pressure only when the whole stroke came from a pen.
+            let pressures: Option<Vec<f32>> = self.paint_pressure.drain(..).collect();
+            if let Some(pressures) = pressures {
+                args["pressures"] = json!(pressures);
+            }
+            self.run("paint.stroke_3d", args, cx);
         }
     }
 
@@ -2179,4 +2186,13 @@ mod base64_free {
     fn round_trip() {
         assert_eq!(decode("aGVsbG8=").unwrap(), b"hello");
     }
+}
+
+/// Pen pressure for the paint brush. Windows and Linux paint at the fixed
+/// size until the M0 spike passes there.
+fn pen_pressure() -> Option<f32> {
+    #[cfg(target_os = "macos")]
+    return crate::pen::pen_pressure();
+    #[cfg(not(target_os = "macos"))]
+    None
 }

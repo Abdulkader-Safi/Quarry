@@ -54,6 +54,12 @@ pub fn reading() -> String {
     format!("pressure {pressure:.3} ({source})")
 }
 
+/// Pen pressure 0..1 from the latest event, or None when that event came from
+/// a mouse or trackpad (those paint at the fixed brush size).
+pub fn pen_pressure() -> Option<f32> {
+    (SOURCE.load(Relaxed) == 2).then(|| f32::from_bits(PRESSURE.load(Relaxed)))
+}
+
 /// Seconds since boot, on the same clock as `NSEvent::timestamp`.
 pub fn uptime() -> f64 {
     NSProcessInfo::processInfo().systemUptime()

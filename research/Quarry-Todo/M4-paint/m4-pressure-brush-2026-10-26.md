@@ -1,11 +1,11 @@
 ---
 id: "m4-pressure-brush-2026-10-26"
-status: "todo"
+status: "review"
 priority: "high"
 assignee: "safi"
 dueDate: null
 created: "2026-10-26T09:57:15.000Z"
-modified: "2026-10-27T04:30:00.000Z"
+modified: "2026-10-27T15:20:00.000Z"
 labels: ["m4", "paint", "input"]
 order: 43
 ---
@@ -30,3 +30,10 @@ FR-PAINT-03.
 - `quarry-ops::paint::pressure_size(pressure, max)`: whole pixels, 1 at a light touch, max at full, never 0, max when there is no tablet. `paint.stroke_3d` takes per-point `pressures`.
 - Tested: pressure 0.15 at size 3 paints 1 texel, 1.0 paints a 3x3 stamp.
 - Left: feeding the M0 pen readout into the brush in the app, the size ramp in Settings, and the hand test with a tablet.
+
+## App done 2026-10-27
+
+- The M0 NSEvent monitor now runs in the editor on macOS. Each point of a 3D paint stroke records pen pressure; when every point came from a pen, `paint.stroke_3d` gets `pressures` and the brush grows from 1 px to the panel's brush size. A mouse or trackpad stroke sends none and paints at the fixed size, as before.
+- Windows and Linux paint at the fixed size (the M0 spike has not run there).
+- Skipped: a separate min/max ramp in Settings. The ramp is 1 px to the brush size; add a setting if that proves too narrow.
+- For review: light and heavy strokes with a tablet at size 3.
