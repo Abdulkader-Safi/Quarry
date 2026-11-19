@@ -121,3 +121,6 @@ brings the `http` types crate for its client trait; no client is linked. `quarry
   features are not enabled here, but the advisory covers the whole crate. `async-executor` moved
   1.14.0 → 1.14.1 because 1.14.0 was yanked. `chrono` (RUSTSEC-2026-0543, unmaintained) is added to
   the deny ignore list: it comes in through GPUI and there is no upgrade path we control.
+- 2026-11-19: GitHub retired the macOS 14 runners on 2026-11-02, so the CI matrix is
+  `macos-15` (Apple Silicon) now, and the release build uses `macos-15` plus `macos-15-intel`.
+  The spec text still names `macos-14`; the current workflow files are the truth.

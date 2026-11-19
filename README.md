@@ -100,7 +100,7 @@ To rewrite the golden files after an intended change to export output:
 QUARRY_UPDATE_GOLDENS=1 cargo test -p quarry-io --test skin_bar
 ```
 
-CI runs fmt, clippy, tests, cargo-deny and the glTF validator on `macos-14`, `windows-latest` and `ubuntu-22.04`.
+CI runs fmt, clippy, tests, cargo-deny and the glTF validator on `macos-15`, `windows-latest` and `ubuntu-22.04`.
 
 ## Layout
 

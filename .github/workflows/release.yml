@@ -19,9 +19,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14        # Apple Silicon
+          - os: macos-15        # Apple Silicon
             formats: app,dmg
-          - os: macos-13        # Intel
+          - os: macos-15-intel  # Intel
             formats: app,dmg
           - os: windows-latest
             formats: nsis

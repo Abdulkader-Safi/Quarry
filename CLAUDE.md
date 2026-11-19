@@ -63,7 +63,7 @@ cargo run -p quarry -- --headless     # no window, batch jobs
 cargo run -p quarry-mcp               # MCP stdio server
 ```
 
-CI runs fmt, clippy, test and cargo-deny on `macos-14`, `windows-latest` and `ubuntu-22.04`, plus the Khronos glTF Validator on the export goldens.
+CI runs fmt, clippy, test and cargo-deny on `macos-15`, `windows-latest` and `ubuntu-22.04`, plus the Khronos glTF Validator on the export goldens.
 
 ## Rules that never bend
 
