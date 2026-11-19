@@ -586,7 +586,10 @@ impl<'a> Builder<'a> {
                                 (keys, output, Interpolation::Step)
                             }
                             (None, Property::Rotation) => {
-                                let reduced = quarry_ops::anim::reduce(&rotations, 0.05);
+                                // Kept keys stay within 0.4 deg of the sampled pose, so the
+                                // player's 0.5 deg budget holds with margin, and a smooth ease
+                                // loses keys on every platform, not just on ARM.
+                                let reduced = quarry_ops::anim::reduce(&rotations, 0.4);
                                 let output =
                                     self.vec4s(reduced.iter().map(|(_, q)| q.to_array()).collect());
                                 (
