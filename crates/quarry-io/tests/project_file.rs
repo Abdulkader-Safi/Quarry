@@ -21,7 +21,15 @@ fn image(name: &str, role: ImageRole, w: u32, h: u32, seed: u8) -> Image {
         tile_px: 16,
         padding: 0,
         zip_path: String::new(),
-        source_path: Some(format!("/art/{name}.png")),
+        // A real absolute path for the platform, so the round trip through
+        // relative_to/absolute_from compares the same string on Windows too.
+        source_path: Some(
+            std::env::temp_dir()
+                .join("art")
+                .join(format!("{name}.png"))
+                .to_string_lossy()
+                .into_owned(),
+        ),
         source_hash: seed as u64,
         filter: Filter::Nearest,
         watch: true,
