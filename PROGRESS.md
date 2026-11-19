@@ -116,3 +116,8 @@ brings the `http` types crate for its client trait; no client is linked. `quarry
   They reach agents as much as people. The UI's own strings go in one file when the shell is built;
   moving the command messages there is part of the accessibility pass.
 
+- 2026-11-19: `rmcp` bumped from the spec's `=3.7.0` to `=3.9.0` (stdio only, no API change) for
+  RUSTSEC-2026-0462, the unbounded response buffering in its streamable-HTTP clients. Those client
+  features are not enabled here, but the advisory covers the whole crate. `async-executor` moved
+  1.14.0 → 1.14.1 because 1.14.0 was yanked. `chrono` (RUSTSEC-2026-0543, unmaintained) is added to
+  the deny ignore list: it comes in through GPUI and there is no upgrade path we control.
